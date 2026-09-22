@@ -1,0 +1,9 @@
+{
+  "name": "paperrose-backend",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Flask API for PaperRoseAI — AI Terms & Conditions reader",
+  "scripts": {
+    "start": "python app.py"
+  }
+}

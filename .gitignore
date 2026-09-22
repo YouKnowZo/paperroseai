@@ -1,0 +1,44 @@
+# --- Secrets: never commit these ---
+.env
+.env.*
+!.env.example
+# Provider API keys saved from the settings modal. NOTE: Git has no inline
+# comments — a trailing "# ..." becomes part of the pattern and silently stops
+# it matching, which would have committed a pasted key.
+backend/keys.json
+backend/keys.json.*
+backend/buddy_settings.json
+
+# --- Confidential legal documents: never publish these ---
+backend/legal/*NDA*
+backend/legal/*COPYRIGHT*
+
+# --- Runtime state & logs ---
+*.log
+backend/flask.log
+backend/uploads/
+scratch/*.json
+scratch/*.log
+scratch/test.html
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+backend/venv/
+.venv/
+venv/
+
+# --- Node / frontend ---
+node_modules/
+dist/
+.vite/
+*.local
+
+# --- Editor/agent workspace state ---
+.freebuff/
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
