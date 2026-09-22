@@ -32,6 +32,7 @@ venv/
 node_modules/
 dist/
 .vite/
+.vercel/
 *.local
 
 # --- Editor/agent workspace state ---
