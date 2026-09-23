@@ -4,7 +4,7 @@ const SEV_ORDER = { high: "High", medium: "Medium", low: "Low" };
 
 function SummaryCard({ result }) {
   return (
-    <div className="card summary-card">
+    <div className="card summary-card" id="summary">
       <h3>💬 In plain English</h3>
       <ul className="summary-list">
         {result.plain_summary.map((s, i) => (
@@ -98,7 +98,7 @@ function FlagItem({ flag, index }) {
 function FlagsCard({ flags }) {
   if (!flags?.length) {
     return (
-      <div className="card flags-card">
+      <div className="card flags-card" id="flags">
         <h3>🚩 Red flags <span className="count">0</span></h3>
         <div className="no-flags">
           <span className="big">🎉</span>
@@ -109,7 +109,7 @@ function FlagsCard({ flags }) {
   }
   const high = flags.filter((f) => f.severity === "high").length;
   return (
-    <div className="card flags-card">
+    <div className="card flags-card" id="flags">
       <h3>
         🚩 Red flags <span className="count">{flags.length}{high ? ` · ${high} serious` : ""}</span>
       </h3>
@@ -132,7 +132,7 @@ export default function Results({ result }) {
         <SummaryCard result={result} />
       </div>
 
-      <div className="card categories-card">
+      <div className="card categories-card" id="categories">
         <h3>🧭 Category safety levels</h3>
         <div className="categories-grid">
           {result.categories.map((c) => (

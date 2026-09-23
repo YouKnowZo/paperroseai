@@ -214,6 +214,78 @@ body {
 }
 
 /* ---------- Layout ---------- */
+/* --- Nav bar (lives inside the sticky header) --- */
+.nav-row { border-top: 1px solid var(--border); }
+.nav-inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 9px 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 7px 14px;
+  cursor: pointer;
+  transition: transform var(--speed), border-color var(--speed), color var(--speed), background var(--speed);
+}
+.nav-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+.nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.nav-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 1px 5px;
+  background: var(--border);
+}
+.nav-jumps { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.nav-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-2);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: color var(--speed), background var(--speed), border-color var(--speed);
+}
+.nav-chip:hover { color: var(--text); background: var(--surface-3); border-color: var(--border); }
+.nav-btn.nav-exit {
+  margin-left: auto;
+  color: var(--dangerous);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+.nav-btn.nav-exit:hover:not(:disabled) { background: rgba(239, 68, 68, 0.08); }
+@media (max-width: 640px) {
+  .nav-label { display: none; } /* icons only, so the row never wraps badly */
+  .nav-jumps { flex-basis: 100%; order: 3; }
+  .nav-btn.nav-exit { margin-left: 0; }
+}
+
+/* Jump targets must clear the sticky header, or the nav hides what it jumps to */
+#summary,
+#categories,
+#flags { scroll-margin-top: 132px; }
+
 .container {
   max-width: 1180px;
   margin: 0 auto;

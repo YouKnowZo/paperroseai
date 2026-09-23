@@ -1,6 +1,6 @@
 import Mascot from "./Mascot.jsx";
 
-export default function Header({ theme, onToggleTheme, aiReady, onOpenSettings }) {
+export default function Header({ theme, onToggleTheme, aiReady, onOpenSettings, children }) {
   return (
     <header className="header">
       <div className="header-inner">
@@ -25,6 +25,9 @@ export default function Header({ theme, onToggleTheme, aiReady, onOpenSettings }
           {theme === "dark" ? "☀️" : "🌙"}
         </button>
       </div>
+      {/* The nav row lives inside the sticky header, so it rides along with it
+          and stays reachable while a long report scrolls past. */}
+      {children}
     </header>
   );
 }
