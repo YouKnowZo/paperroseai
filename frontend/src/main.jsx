@@ -66,6 +66,7 @@ function App() {
   const [toast, setToast] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const inputCardRef = useRef(null);
+  const autoScanStartedRef = useRef(false);
 
   // Navigation state. The stack mirrors the history entries we created, and
   // posRef is where we currently are in it; results live in a map so stepping
@@ -183,6 +184,14 @@ function App() {
     }
     window.addEventListener("pr:analyze", onAnalyze);
     return () => window.removeEventListener("pr:analyze", onAnalyze);
+  }, []);
+
+  // A URL report can be shared/bookmarked. Start it after the first render,
+  // but guard it because React StrictMode intentionally re-runs effects in dev.
+  useEffect(() => {
+    if (!AUTO_SCAN_URL || autoScanStartedRef.current) return;
+    autoScanStartedRef.current = true;
+    handleAnalyze({ type: "url", value: AUTO_SCAN_URL });
   }, []);
 
   useEffect(() => {
