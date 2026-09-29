@@ -105,7 +105,7 @@ PORT=5000 venv/Scripts/python app.py    # or: venv/bin/python app.py
 ```bash
 cd frontend
 npm install
-npm run dev        # http://localhost:3000 — proxies /api to the Flask backend
+npm run dev        # http://localhost:3001 — proxies /api to the Flask backend
 ```
 
 ## 🔑 Turning on AI mode
