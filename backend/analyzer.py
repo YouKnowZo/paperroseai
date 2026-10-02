@@ -1088,7 +1088,8 @@ def _fallback_summary(heur: dict, flags: list, level: str, score: int = 50) -> l
 
     # 4. Provenance, so it's clear this was a rules scan and not an AI reading.
     if _is_public_mode():
-        ai_tip = "Opt in to the optional AI summary on a website scan for a fuller walkthrough."
+        ai_enabled = bool(os.getenv("CLOUDFLARE_API_TOKEN")) and os.getenv("CLOUDFLARE_FREE_TIER_CONSENT", "0").strip().lower() in {"1", "true", "yes"}
+        ai_tip = "Opt in to the optional AI summary on a website scan for a fuller walkthrough." if ai_enabled else "Review the quoted clauses before making a decision; automated scans may miss nuance."
     else:
         ai_tip = "Add an API key in settings for a full plain-English walkthrough."
     out.append(
