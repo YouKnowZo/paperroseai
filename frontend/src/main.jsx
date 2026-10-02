@@ -8,6 +8,8 @@ import Results from "./components/Results.jsx";
 import FloatingBuddy from "./components/FloatingBuddy.jsx";
 import BuddyInstaller from "./components/BuddyInstaller.jsx";
 import SettingsModal from "./components/SettingsModal.jsx";
+import Mascot from "./components/Mascot.jsx";
+import Icon from "./components/Icon.jsx";
 import { speakOrQueue } from "./lib/voice.js";
 import { playEarcon } from "./lib/chimes.js";
 import { checkHealth, analyzeUrl, analyzeText, analyzeFile } from "./lib/api.js";
@@ -19,10 +21,10 @@ const params = new URLSearchParams(window.location.search);
 const AUTO_SCAN_URL = params.get("scan");
 
 const FEATURES = [
-  { icon: "🎯", title: "Instant grade", text: "A–F fairness grade, computed from real clauses — not vibes." },
-  { icon: "🧭", title: "Safety levels", text: "Privacy, legal, content, billing and account risk, each scored 0–100." },
-  { icon: "🚩", title: "Red flag radar", text: "Arbitration traps, data selling, auto-renewals — quoted straight from the doc." },
-  { icon: "💬", title: "Plain English", text: "Legal jargon translated into words a 12-year-old could read." },
+  { icon: "scales", title: "Instant grade", text: "A–F fairness grade, computed from real clauses — not vibes." },
+  { icon: "shield", title: "Safety levels", text: "Privacy, legal, content, billing and account risk, each scored 0–100." },
+  { icon: "flag", title: "Red flag radar", text: "Arbitration traps, data selling, auto-renewals — quoted straight from the doc." },
+  { icon: "message", title: "Plain English", text: "Legal jargon translated into words a 12-year-old could read." },
 ];
 
 // The app used to be a one-way trip: idle -> done, with the only way back a
@@ -56,6 +58,48 @@ function useLocalTheme() {
   return [theme, setTheme];
 }
 
+function HeroTeam() {
+  const scribes = [
+    { className: "hero-team-robot-left", size: 166, mood: "thinking" },
+    { className: "hero-team-robot-center", size: 198, mood: "happy" },
+    { className: "hero-team-robot-right", size: 158, mood: "thinking" },
+  ];
+
+  return (
+    <div
+      className="hero-team"
+      role="img"
+      aria-label="Three PaperRoseAI legal-scribe robots checking an agreement, with red roses in their hands"
+    >
+      <div className="hero-team-backdrop" aria-hidden="true" />
+      <div className="hero-team-paper" aria-hidden="true">
+        <span className="hero-team-paper-title">PAPERROSEAI REVIEW</span>
+        <span className="hero-team-paper-line" />
+        <span className="hero-team-paper-line short" />
+        <span className="hero-team-paper-highlight" />
+        <span className="hero-team-paper-line" />
+        <span className="hero-team-paper-line medium" />
+      </div>
+      <span className="hero-team-spark hero-team-spark-one" aria-hidden="true">✦</span>
+      <span className="hero-team-spark hero-team-spark-two" aria-hidden="true">✧</span>
+      <div className="hero-team-tag hero-team-tag-left" aria-hidden="true">
+        <span className="hero-team-tag-icon">✦</span> CLAUSE CHECK
+      </div>
+      <div className="hero-team-tag hero-team-tag-right" aria-hidden="true">
+        <span className="hero-team-tag-icon check">✓</span> PLAIN ENGLISH
+      </div>
+      {scribes.map((scribe) => (
+        <div className={`hero-team-robot ${scribe.className}`} key={scribe.className}>
+          <Mascot size={scribe.size} mood={scribe.mood} className="hero-team-mascot" />
+        </div>
+      ))}
+      <div className="hero-team-caption" aria-hidden="true">
+        <span className="hero-team-caption-dot" /> THE PAPERROSEAI SCRIBE SQUAD
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [theme, setTheme] = useLocalTheme();
   const [health, setHealth] = useState(null);
@@ -65,6 +109,8 @@ function App() {
   const [progress, setProgress] = useState(0);
   const [toast, setToast] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Unknown/offline health must never expose local-only controls on the public app.
+  const publicMode = health?.public_mode !== false;
   const inputCardRef = useRef(null);
   const autoScanStartedRef = useRef(false);
 
@@ -163,7 +209,7 @@ function App() {
   }
 
   const refreshHealth = () =>
-    checkHealth().then(setHealth).catch(() => setHealth({ status: "down" }));
+    checkHealth().then(setHealth).catch(() => setHealth({ status: "down", public_mode: true }));
 
   useEffect(() => {
     refreshHealth();
@@ -179,20 +225,27 @@ function App() {
   // Listen for the buddy asking the main app to run a full analysis
   useEffect(() => {
     function onAnalyze(e) {
-      handleAnalyze(e.detail);
+      if (publicMode) {
+        goHome();
+        window.dispatchEvent(new CustomEvent("pr:prefill", { detail: e.detail }));
+      } else handleAnalyze(e.detail);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
     window.addEventListener("pr:analyze", onAnalyze);
     return () => window.removeEventListener("pr:analyze", onAnalyze);
-  }, []);
+  }, [publicMode]);
 
   // A URL report can be shared/bookmarked. Start it after the first render,
   // but guard it because React StrictMode intentionally re-runs effects in dev.
   useEffect(() => {
-    if (!AUTO_SCAN_URL || autoScanStartedRef.current) return;
+    if (!AUTO_SCAN_URL || !health || autoScanStartedRef.current) return;
     autoScanStartedRef.current = true;
+    if (health.public_mode !== false) {
+      setToast("Verify the human check and press Analyze to scan this website.");
+      return;
+    }
     handleAnalyze({ type: "url", value: AUTO_SCAN_URL });
-  }, []);
+  }, [health]);
 
   useEffect(() => {
     if (!toast) return;
@@ -238,9 +291,9 @@ function App() {
     }, 350);
     try {
       let data;
-      if (req.type === "url") data = await analyzeUrl(req.value);
-      else if (req.type === "text") data = await analyzeText(req.value);
-      else data = await analyzeFile(req.value);
+      if (req.type === "url") data = await analyzeUrl(req.value, { allowFreeAI: req.allowFreeAI === true, turnstileToken: req.turnstileToken });
+      else if (req.type === "text") data = await analyzeText(req.value, { turnstileToken: req.turnstileToken });
+      else data = await analyzeFile(req.value, { turnstileToken: req.turnstileToken });
       // The user may have navigated away while this was running; if so, the
       // result is no longer what they are looking at.
       if (runId !== runIdRef.current) return;
@@ -279,6 +332,7 @@ function App() {
         theme={theme}
         onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
         aiReady={health?.ai_available}
+        publicMode={publicMode}
         onOpenSettings={() => setSettingsOpen(true)}
       >
         <NavBar
@@ -294,35 +348,48 @@ function App() {
       </Header>
 
       {settingsOpen && (
-        <SettingsModal onClose={() => setSettingsOpen(false)} onNote={setToast} />
+        <SettingsModal publicMode={publicMode} onClose={() => setSettingsOpen(false)} onNote={setToast} />
       )}
 
-      <FloatingBuddy autoScanUrl={AUTO_SCAN_URL} />
+      <FloatingBuddy result={result} busy={busy} onNewScan={goHome} />
 
       {phase !== "done" && (
         <section className="hero">
-          <div className="hero-eyebrow">
-            <span className="dot" />
-            {health?.ai_available ? "AI engine online" : health?.status === "down" ? "Backend offline" : "Rules engine — offline ready"}
-            {health && !health.ai_available && health.status !== "down" && (
-              <button className="eyebrow-link" onClick={() => setSettingsOpen(true)}>
-                Add an API key →
-              </button>
-            )}
+          <div className="hero-copy">
+            <div className="hero-eyebrow">
+              <span className="dot" />
+              {health?.ai_available ? "AI engine online" : health?.status === "down" ? "Backend offline" : !health ? "Connecting securely…" : publicMode && !health?.turnstile_ready ? "Scan protection needs setup" : "Rules engine online"}
+              {health && !health.public_mode && !health.ai_available && health.status !== "down" && (
+                <button className="eyebrow-link" onClick={() => setSettingsOpen(true)}>
+                  Add an API key →
+                </button>
+              )}
+            </div>
+            <div className="hero-kicker">YOUR FINE-PRINT ADVANTAGE</div>
+            <h1>
+              Small print.<br /><span className="grad-text">Big clarity.</span>
+            </h1>
+            <p>
+              Know what you’re agreeing to. Turn terms, privacy policies, and agreements into a fairness grade, clear takeaways, and the clauses worth a second look.
+            </p>
+            <div className="hero-trust"><span><Icon name="shield" size={16} /> Evidence-backed flags</span><span><Icon name="volume" size={16} /> A voice that fits you</span></div>
           </div>
-          <h1>
-            Never sign something<br />you don't <span className="grad-text">understand</span>.
-          </h1>
-          <p>
-            PaperRoseAI reads any Terms &amp; Conditions or Privacy Policy, grades how fair it is,
-            and hands you the red flags in plain English — in seconds.
-          </p>
+          <HeroTeam />
         </section>
       )}
 
       {phase !== "done" && (
         <div ref={inputCardRef}>
-          <InputCard busy={busy} onAnalyze={handleAnalyze} />
+          <InputCard
+            busy={busy}
+            onAnalyze={handleAnalyze}
+            publicMode={publicMode}
+            freeAIAvailable={health?.free_ai_available === true}
+            turnstileSiteKey={health?.turnstile_site_key || ""}
+            turnstileReady={health?.status === "ok" && (!publicMode || health?.turnstile_ready === true)}
+            initialUrl={AUTO_SCAN_URL || ""}
+            backendReady={health?.status === "ok"}
+          />
         </div>
       )}
 
@@ -336,7 +403,7 @@ function App() {
         </div>
       )}
 
-      {phase === "done" && result && <Results result={result} />}
+      {phase === "done" && result && <Results result={result} publicMode={publicMode} />}
 
       {phase === "done" && (
         <div className="container" style={{ display: "flex", justifyContent: "center", paddingBottom: 70 }}>
@@ -350,7 +417,7 @@ function App() {
         <section className="features">
           {FEATURES.map((f) => (
             <div className="feature" key={f.title}>
-              <div className="icon">{f.icon}</div>
+              <div className="icon"><Icon name={f.icon} size={24} /></div>
               <h4>{f.title}</h4>
               <p>{f.text}</p>
             </div>
@@ -358,11 +425,13 @@ function App() {
         </section>
       )}
 
-      {phase === "idle" && <BuddyInstaller />}
+      {phase === "idle" && health && !health.public_mode && <BuddyInstaller />}
 
       <footer className="footer">
         <div>
-          <strong>PaperRoseAI</strong> · AI-generated summaries are informational and not legal advice.
+          <div className="footer-brand"><strong>PaperRoseAI</strong><span>by Paperbagexpress</span></div>
+          Analysis is informational, may miss nuance, and is not legal advice.
+          {health?.public_mode && <span> Website scans are fetched by the server. Optional AI is used only after per-scan consent; pasted and uploaded text are rules-only.</span>}
         </div>
       </footer>
 
@@ -372,7 +441,7 @@ function App() {
         </div>
       )}
 
-      {toast && <div className="toast">{toast}</div>}
+      {toast && <div className="toast" role="status">{toast}</div>}
     </>
   );
 }

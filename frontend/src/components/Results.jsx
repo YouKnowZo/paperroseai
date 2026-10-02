@@ -1,15 +1,16 @@
 import GradeDial from "./GradeDial.jsx";
+import Icon from "./Icon.jsx";
 
 const SEV_ORDER = { high: "High", medium: "Medium", low: "Low" };
 
 function SummaryCard({ result }) {
   return (
     <div className="card summary-card" id="summary">
-      <h3>💬 In plain English</h3>
+      <h3><Icon name="message" /> In plain English</h3>
       <ul className="summary-list">
         {result.plain_summary.map((s, i) => (
           <li key={i}>
-            <span className="bullet">{["👋", "🔍", "⚖️", "💳", "🛡️", "✨"][i % 6]}</span>
+            <span className="bullet"><Icon name={["check", "file", "scales", "flag", "shield", "sparkles"][i % 6]} size={15} /></span>
             {s}
           </li>
         ))}
@@ -99,9 +100,9 @@ function FlagsCard({ flags }) {
   if (!flags?.length) {
     return (
       <div className="card flags-card" id="flags">
-        <h3>🚩 Red flags <span className="count">0</span></h3>
+        <h3><Icon name="flag" /> Red flags <span className="count">0</span></h3>
         <div className="no-flags">
-          <span className="big">🎉</span>
+          <span className="big"><Icon name="shield" size={30} /></span>
           No known predatory clauses found. Still skim it yourself — automation misses nuance.
         </div>
       </div>
@@ -111,7 +112,7 @@ function FlagsCard({ flags }) {
   return (
     <div className="card flags-card" id="flags">
       <h3>
-        🚩 Red flags <span className="count">{flags.length}{high ? ` · ${high} serious` : ""}</span>
+        <Icon name="flag" /> Red flags <span className="count">{flags.length}{high ? ` · ${high} serious` : ""}</span>
       </h3>
       <div className="flag-list">
         {flags.map((f, i) => (
@@ -123,7 +124,7 @@ function FlagsCard({ flags }) {
   );
 }
 
-export default function Results({ result }) {
+export default function Results({ result, publicMode = false }) {
   const m = result.meta || {};
   return (
     <div className="results">
@@ -133,7 +134,7 @@ export default function Results({ result }) {
       </div>
 
       <div className="card categories-card" id="categories">
-        <h3>🧭 Category safety levels</h3>
+        <h3><Icon name="shield" /> Category safety levels</h3>
         <div className="categories-grid">
           {result.categories.map((c) => (
             <CategoryTile key={c.id} cat={c} />
@@ -143,9 +144,9 @@ export default function Results({ result }) {
 
       <FlagsCard flags={result.flags} />
 
-      {result.related_pages?.length > 0 && (
+      {!publicMode && result.related_pages?.length > 0 && (
         <div className="card related-card">
-          <h3>🔗 More fine print on this site</h3>
+          <h3><Icon name="link" /> More fine print on this site</h3>
           <div className="related-row">
             {result.related_pages.map((p) => (
               <button
@@ -165,7 +166,7 @@ export default function Results({ result }) {
 
       {result.did_you_know?.length > 0 && (
         <div className="card dyk-card">
-          <h3>💡 Did you know?</h3>
+          <h3><Icon name="sparkles" /> Did you know?</h3>
           {result.did_you_know.map((d, i) => (
             <p key={i}>{d}</p>
           ))}

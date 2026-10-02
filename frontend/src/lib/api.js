@@ -1,4 +1,8 @@
-const API_BASE = import.meta.env.VITE_API_URL || "";
+export const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+
+function withTurnstile(payload, token) {
+  return { ...payload, turnstile_token: token || "" };
+}
 
 async function handle(res) {
   let data = null;
@@ -10,28 +14,35 @@ async function handle(res) {
   if (!res.ok) {
     throw new Error(data?.error || `Request failed (HTTP ${res.status})`);
   }
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("The analysis service returned an unexpected response. Please try again.");
+  }
   return data;
 }
 
 export async function checkHealth() {
   const res = await fetch(`${API_BASE}/api/health`);
-  return handle(res);
+  const data = await handle(res);
+  if (data.status !== "ok" || typeof data.public_mode !== "boolean") {
+    throw new Error("The analysis service is not ready.");
+  }
+  return data;
 }
 
-export async function analyzeUrl(url) {
+export async function analyzeUrl(url, { allowFreeAI = false, turnstileToken = "" } = {}) {
   const res = await fetch(`${API_BASE}/api/analyze/url`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url }),
+    body: JSON.stringify(withTurnstile({ url, allow_free_ai: allowFreeAI }, turnstileToken)),
   });
   return handle(res);
 }
 
-export async function analyzeText(text) {
+export async function analyzeText(text, { turnstileToken = "" } = {}) {
   const res = await fetch(`${API_BASE}/api/analyze/text`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify(withTurnstile({ text }, turnstileToken)),
   });
   return handle(res);
 }
@@ -65,9 +76,10 @@ export async function checkKeys() {
   return handle(res);
 }
 
-export async function analyzeFile(file) {
+export async function analyzeFile(file, { turnstileToken = "" } = {}) {
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("turnstile_token", turnstileToken);
   const res = await fetch(`${API_BASE}/api/analyze/upload`, {
     method: "POST",
     body: formData,

@@ -1,4 +1,4 @@
-# PaperRoseAI v2 🤖📄
+# PaperRoseAI — by Paperbagexpress
 
 **AI-powered Terms & Conditions reader** — paste a link, text, or upload a file and get an
 instant **fairness grade (A–F)**, **safety levels per category**, **red flags with quotes**,
@@ -21,10 +21,7 @@ and a **plain-English summary**.
      rights grab) costs a lot, and the total runs through a decaying curve so documents stay
      distinguishable instead of all hitting the floor. A verified high-harm clause caps the
      score at "caution" regardless of how friendly the rest reads.
-2. **AI layer** (optional): OpenAI (`gpt-4o-mini`) or Gemini (`gemini-2.0-flash`) adds a
-   real plain-English summary, per-category verdicts and a 0–100 fairness score.
-   The deterministic engine cross-checks the AI and clamps its score if it gets too
-   generous with high-severity findings.
+2. **AI layer** (optional): local development can use OpenAI (`gpt-4o-mini`) or Gemini (`gemini-3.1-flash-lite`). Public deployment can use Cloudflare Workers AI (`@cf/meta/llama-3.3-70b-instruct-fp8-fast`) for a website scan only after the user opts in for that scan. Pasted/uploaded text always stays on the deterministic rules path. The deterministic engine cross-checks AI flags and clamps its score if it is too generous.
 3. **Graceful fallback**: no key or a failed call? The app still grades, flags and summarizes.
    Keys the settings page has already verified as *rejected* are skipped rather than retried on
    every scan, so a dead key in `.env` costs nothing (0.01s instead of ~55s of timeouts).
@@ -42,9 +39,10 @@ predatory pasted contract scores 23/F against a user-friendly one at 98/A+.
 Grades reflect **what the document says**, not the company's reputation. Run it yourself:
 
 ```bash
-cd backend && venv/Scripts/python app.py          # scan live terms pages end to end
-venv/Scripts/python -X utf8 ../scratch/test_real_scans.py
-venv/Scripts/python -X utf8 ../scratch/test_detection_precision.py   # no server needed
+backend/venv/Scripts/python backend/app.py       # start the local API
+# In another terminal, from the repository root:
+backend/venv/Scripts/python -X utf8 scratch/test_real_scans.py
+backend/venv/Scripts/python -X utf8 scratch/test_detection_precision.py   # no server needed
 ```
 
 `test_detection_precision.py` pins 28 cases: real sentences harvested from live pages that must
@@ -108,10 +106,21 @@ npm install
 npm run dev        # http://localhost:3001 — proxies /api to the Flask backend
 ```
 
-## 🔑 Turning on AI mode
+## Deploy to Vercel
 
-Click the **⚙️ gear** in the header (or the *“Add an API key →”* link under the hero
-when AI is off) and paste a key. That's it — **no `.env` editing, no restart**:
+Deploy this monorepo as **one Vercel Services project**. The root [vercel.json](vercel.json) builds the Vite frontend and Flask backend as separate services, then routes `/api/*` to Flask and all other paths to the frontend under one domain. In Vercel, connect the repository with its root directory set to `.` and the project framework set to **Services**; a Services project requires both that dashboard framework setting and the `services` configuration in `vercel.json`. Since API requests use the same origin, leave `VITE_API_URL` unset. Add `PAPERROSE_PUBLIC_MODE=1`, the exact production `PAPERROSE_ALLOWED_ORIGINS`, Turnstile settings, and (if enabling AI) Cloudflare Workers AI settings as project Environment Variables; do not commit secrets. Deploy the production branch `main`.
+
+The hosted Python function body limit is 4.5 MB, so the public backend caps uploads/requests at 4 MiB (local mode remains 16 MiB). Serverless functions have ephemeral writable storage; public mode therefore disables key CRUD and does not rely on local JSON persistence. Scan throttling is process-local and resets with new function instances, so Turnstile is required for public scans.
+
+### Public deployment privacy and provider choice
+
+The public deployment can keep scanning without any provider secret: rules-only analysis works by default. Optional website-only AI uses a Cloudflare Workers AI token held exclusively in backend environment variables. Visitors must opt in on each URL scan; pasted/uploaded text never reaches hosted AI. Cloudflare's Workers AI data-usage documentation states that customer content is not used to train models or improve Cloudflare/third-party services. The free account allocation is limited to 10,000 Neurons per day and is shared for that Cloudflare account. See the current [pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/) and [data-use terms](https://developers.cloudflare.com/workers-ai/platform/data-usage/) before enabling it.
+
+For public launch, enable `PAPERROSE_PUBLIC_MODE=1`, set `PAPERROSE_ALLOWED_ORIGINS` to the exact public app origin, configure `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, and `TURNSTILE_ALLOWED_HOSTNAMES`, then enable `CLOUDFLARE_FREE_TIER_CONSENT=1` only after reviewing the provider terms. Add `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` in the Vercel project's secret settings. Keep all secret values out of Git and browser `VITE_*` variables. Turnstile must be configured first; public scan endpoints fail closed without server-side Siteverify validation. Cloudflare free AI responses do not imply a guaranteed quota or uptime.
+
+## 🔑 Turning on local AI mode
+
+For local, private use, click the **⚙️ gear** in the header and paste an OpenAI or Gemini key; hosted public mode intentionally does not accept user-supplied provider secrets.
 
 1. Paste an OpenAI (`sk-…`) or Google Gemini key and hit **Save & test**.
 2. The key is verified live against the provider *before* it's saved, so a typo is
@@ -141,12 +150,28 @@ Pointing at a gateway or local model? Set `OPENAI_BASE_URL` (Azure, LiteLLM,
 OpenRouter, Ollama, vLLM…) or `GEMINI_BASE_URL` and the AI layer plus key checks
 follow it.
 
+## Rose: your floating fine-print guide
+
+Rose is available in both public and local mode. Open the floating robot to select an English voice installed in your browser/device, choose Calm guide, Bright buddy, or Clear narrator, adjust speaking speed, preview speech, or read the current report aloud. Voice availability depends on the operating system/browser; some system voices use a browser speech service. Preferences stay in browser storage and never mutate shared public backend settings. The assistant sends all scans through the main form, preserving human verification and per-scan AI consent.
+
+## Verification
+
+From the repository root:
+```bash
+backend/venv/Scripts/python scratch/test_public_security.py
+backend/venv/Scripts/python scratch/test_detection_precision.py
+backend/venv/Scripts/python -X utf8 scratch/test_keys_concurrency.py
+cd frontend && npm test && npm run build
+```
+The frontend is JavaScript/JSX (no TypeScript typecheck); the production build checks compilation. Public scan protection is fail-closed: a deployment is not launch-ready until a real Turnstile-protected scan succeeds on the assigned production domain. Do not reuse exposed secrets or put secret values in chat.
+
 ## 🤖 The Buddy bookmarklet
 
-Drag the **PaperRose Buddy** robot from the install card (bottom of the homepage)
+For local use, drag the **PaperRose Buddy** robot from the install card (bottom of the homepage)
 to your bookmarks bar. Then, on **any website's** terms/privacy page, click the
 bookmark — a robot appears on that page, scrapes the visible text in-browser,
-and grades it via your local backend **without navigating away**.
+and grades it via your local backend **without navigating away**. The hosted public
+app hides the bookmarklet because scans there require a Turnstile challenge.
 
 - Works on any site; the injected widget is isolated in a Shadow DOM so it
   can't clash with the host page's styles.
@@ -158,9 +183,7 @@ and grades it via your local backend **without navigating away**.
   browser's speech synthesis, with the same earcon chimes as the in-app buddy
   (safe arpeggio → dangerous alarm). Speech starts immediately — the bookmark
   click itself provides the required user activation.
-- **One mute everywhere**: the 🔊/🔇 toggle on the injected buddy syncs to the
-  backend (`/api/buddy/config`), so mute state is shared across every website
-  and with the in-app buddy (they share the same `pr-buddy-muted` setting).
+- **Local bookmarklet mute** syncs to the local backend (`/api/buddy/config`) across injected website buddies. The in-app Rose assistant keeps its mute/voice preferences private in this browser; hosted writes to shared buddy settings are disabled.
 - Regenerate the bookmarklet with a different API base via
   `buildBookmarklet(apiBase)` in `frontend/src/lib/bookmarklet.js`.
 
@@ -168,14 +191,14 @@ and grades it via your local backend **without navigating away**.
 
 | Endpoint | Method | Body | Description |
 |----------|--------|------|-------------|
-| `/api/health` | GET | — | Engine + per-provider key status |
-| `/api/analyze/url` | POST | `{ "url": "https://…" }` | Fetch a live T&C/privacy page and analyze |
-| `/api/analyze/text` | POST | `{ "text": "…" }` | Analyze pasted text |
-| `/api/settings/keys` | GET | — | Provider status (masked keys, source, validity) |
-| `/api/settings/keys` | POST | `{ "provider": "openai", "key": "sk-…", "force?": true }` | Verify live, then save |
-| `/api/settings/keys/<p>` | DELETE | — | Forget a saved key (falls back to `.env`) |
-| `/api/settings/keys/check` | POST | — | Re-test every configured key |
-| `/api/analyze/upload` | POST | multipart `file` | PDF, DOCX, TXT, MD, HTML (≤16 MB) |
-| `/api/buddy/config` | GET / POST | `{ "muted": true }` | Shared buddy settings (mute sync across sites) |
+| `/api/health` | GET | — | Engine status; never returns provider secrets |
+| `/api/analyze/url` | POST | `{ "url": "https://…" }` | Fetch a public T&C/privacy page and analyze (Turnstile required in public mode) |
+| `/api/analyze/text` | POST | `{ "text": "…" }` | Analyze pasted text (rules-only in public mode) |
+| `/api/settings/keys` | GET | — | Local provider status; public mode returns minimal configuration only |
+| `/api/settings/keys` | POST | `{ "provider": "openai", "key": "sk-…", "force?": true }` | Local mode only: verify live, then save |
+| `/api/settings/keys/<p>` | DELETE | — | Local mode only: forget a saved key |
+| `/api/settings/keys/check` | POST | — | Local mode only: re-test configured keys |
+| `/api/analyze/upload` | POST | multipart `file` | PDF, DOCX, TXT, MD, HTML (≤16 MB local; ≤4 MB hosted) |
+| `/api/buddy/config` | GET / POST | `{ "muted": true }` | Local shared buddy settings; disabled for hosted writes |
 
 *Not legal advice — an AI reading aid.*

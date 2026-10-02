@@ -1,17 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 import Mascot from "./Mascot.jsx";
 import buildBookmarklet from "../lib/bookmarklet.js";
-import { checkHealth } from "../lib/api.js";
+import { API_BASE, checkHealth } from "../lib/api.js";
 
 export default function BuddyInstaller() {
   const [copied, setCopied] = useState(false);
   const [backendUp, setBackendUp] = useState(null);
   const linkRef = useRef(null);
 
-  const bookmarkletUrl = buildBookmarklet("http://127.0.0.1:5000");
+  const [apiBase, setApiBase] = useState(API_BASE || "http://127.0.0.1:5000");
+  const bookmarkletUrl = buildBookmarklet(apiBase);
 
   useEffect(() => {
-    checkHealth().then(() => setBackendUp(true)).catch(() => setBackendUp(false));
+    checkHealth()
+      .then((health) => {
+        setBackendUp(true);
+        if (health.public_mode && API_BASE) setApiBase(API_BASE);
+      })
+      .catch(() => setBackendUp(false));
   }, []);
 
   async function copy() {
@@ -79,13 +85,12 @@ export default function BuddyInstaller() {
 
       <div className={`installer-status ${backendUp ? "ok" : backendUp === false ? "down" : ""}`}>
         {backendUp === null && "⏳ Checking backend…"}
-        {backendUp === true && "✅ Backend detected at 127.0.0.1:5000 — bookmarklet ready to use"}
+        {backendUp === true && `✅ Backend detected at ${apiBase} — bookmarklet ready to use`}
         {backendUp === false && "⚠️ Backend offline — start it with: cd backend && PORT=5000 venv/Scripts/python app.py"}
       </div>
 
       <p className="installer-note">
-        The bookmarklet runs entirely in your browser and only talks to your local PaperRoseAI —
-        nothing is sent anywhere else. Keep the backend running while you use it.
+        The bookmarklet reads the current page in your browser and sends that text to {apiBase} for analysis. The configured service receives the page text; it is not kept as an uploaded document.
       </p>
     </div>
   );

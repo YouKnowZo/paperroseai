@@ -5,7 +5,7 @@ Two layers:
   1. Heuristic scanner: deterministic regex pass that detects known predatory
      clauses (arbitration, auto-renewal, data selling, unilateral changes...),
      readability stats and category scores. Always available, zero cost.
-  2. AI layer (OpenAI -> Gemini fallback): plain-English summary, per-category
+  2. AI layer (local OpenAI -> Gemini fallback; public Cloudflare Workers AI): plain-English summary, per-category
      verdicts and a 0-100 fairness score. When no key is configured the
      heuristic result is normalized into the same shape, so the API contract
      never changes.
@@ -24,6 +24,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 log = logging.getLogger("paperrose.analyzer")
+
+
+def _is_public_mode() -> bool:
+    default = "1" if os.getenv("VERCEL") else "0"
+    return os.getenv("PAPERROSE_PUBLIC_MODE", default).strip().lower() in {"1", "true", "yes"}
+
 
 MAX_AI_CHARS = 60_000
 
@@ -755,12 +761,62 @@ def _call_openai(text: str, doc_kind: str) -> dict | None:
         return None
 
 
-def _call_gemini(text: str, doc_kind: str) -> dict | None:
+CLOUDFLARE_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+
+
+def _call_cloudflare(text: str, doc_kind: str) -> dict | None:
+    """Use Cloudflare Workers AI; the API token remains server-side."""
+    api_token = os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
+    account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip()
+    if not api_token or not re.fullmatch(r"[a-fA-F0-9]{32}", account_id):
+        return None
+    url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{CLOUDFLARE_MODEL}"
+    user_prompt = AI_USER_TMPL.format(
+        doc_kind=doc_kind,
+        privacy=CATEGORY_PROMPT_BITS["privacy"],
+        legal=CATEGORY_PROMPT_BITS["legal"],
+        content=CATEGORY_PROMPT_BITS["content"],
+        billing=CATEGORY_PROMPT_BITS["billing"],
+        account=CATEGORY_PROMPT_BITS["account"],
+        text=_clip_for_ai(text),
+    )
+    try:
+        resp = requests.post(
+            url,
+            headers={"Authorization": f"Bearer {api_token}"},
+            json={
+                "messages": [
+                    {"role": "system", "content": AI_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "temperature": 0.2,
+                "max_tokens": 4096,
+            },
+            timeout=AI_TIMEOUT,
+        )
+        resp.raise_for_status()
+        result = resp.json().get("result") or {}
+        raw = result.get("response") or ""
+        raw = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
+        return json.loads(raw) if raw else None
+    except Exception as e:
+        log.warning("Cloudflare Workers AI analysis failed: %s", e)
+        return None
+
+
+def _call_gemini(text: str, doc_kind: str, allow_free_ai: bool = False) -> dict | None:
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         return None
+    if _is_public_mode():
+        if not allow_free_ai:
+            log.info("Gemini call skipped: no per-scan consent")
+            return None
+        if os.getenv("GEMINI_FREE_TIER_CONSENT", "0").strip().lower() not in {"1", "true", "yes"}:
+            log.warning("Gemini call skipped: public free-tier processing is not operator-enabled")
+            return None
     base = (os.getenv("GEMINI_BASE_URL") or "https://generativelanguage.googleapis.com/v1beta").rstrip("/")
-    url = f"{base}/models/gemini-2.0-flash:generateContent"
+    url = f"{base}/models/gemini-3.1-flash-lite:generateContent"
     prompt = AI_SYSTEM_PROMPT + "\n\n" + AI_USER_TMPL.format(
         doc_kind=doc_kind,
         privacy=CATEGORY_PROMPT_BITS["privacy"],
@@ -773,8 +829,11 @@ def _call_gemini(text: str, doc_kind: str) -> dict | None:
     try:
         resp = requests.post(
             url,
-            params={"key": api_key},
-            json={"contents": [{"parts": [{"text": prompt}]}]},
+            headers={"x-goog-api-key": api_key},
+            json={
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"responseMimeType": "application/json", "temperature": 0.2},
+            },
             timeout=AI_TIMEOUT,
         )
         resp.raise_for_status()
@@ -872,8 +931,8 @@ def _live_keys() -> dict:
         return {"openai": os.getenv("OPENAI_API_KEY"), "gemini": os.getenv("GEMINI_API_KEY")}
 
 
-def analyze_text(text: str, doc_kind: str = "Terms & Conditions") -> dict:
-    """Full analysis. Tries OpenAI, then Gemini, then heuristic-only."""
+def analyze_text(text: str, doc_kind: str = "Terms & Conditions", allow_free_ai: bool = False) -> dict:
+    """Run deterministic rules and, when authorized, an optional AI summary."""
     text = re.sub(r"\r\n", "\n", text)
     heur = heuristic_scan(text)
 
@@ -881,14 +940,31 @@ def analyze_text(text: str, doc_kind: str = "Terms & Conditions") -> dict:
     # because an OpenAI key exists would be a lie when Gemini did the work.
     ai, provider_used, model_used = None, None, None
     keys = _live_keys()
-    if keys.get("openai"):
-        ai = _call_openai(text, doc_kind)
-        if ai:
-            provider_used, model_used = "openai", "gpt-4o-mini"
-    if not ai and keys.get("gemini"):
-        ai = _call_gemini(text, doc_kind)
-        if ai:
-            provider_used, model_used = "gemini", "gemini-2.0-flash"
+    public_mode = _is_public_mode()
+    if public_mode:
+        operator_opt_in = os.getenv("CLOUDFLARE_FREE_TIER_CONSENT", "0").strip().lower() in {"1", "true", "yes"}
+        cloudflare_ready = bool(
+            os.getenv("CLOUDFLARE_API_TOKEN")
+            and re.fullmatch(r"[a-fA-F0-9]{32}", os.getenv("CLOUDFLARE_ACCOUNT_ID", ""))
+            and os.getenv("TURNSTILE_SECRET_KEY")
+            and os.getenv("TURNSTILE_SITE_KEY")
+            and os.getenv("TURNSTILE_ALLOWED_HOSTNAMES")
+        )
+        if allow_free_ai and operator_opt_in and cloudflare_ready:
+            ai = _call_cloudflare(text, doc_kind)
+            if ai:
+                provider_used, model_used = "cloudflare", CLOUDFLARE_MODEL
+    else:
+        if keys.get("openai"):
+            ai = _call_openai(text, doc_kind)
+            if ai:
+                provider_used, model_used = "openai", "gpt-4o-mini"
+        # Preserve the local OpenAI -> Gemini fallback. Cloudflare's public
+        # opt-in path is deliberately unavailable to pasted/uploaded content.
+        if not ai and keys.get("gemini"):
+            ai = _call_gemini(text, doc_kind)
+            if ai:
+                provider_used, model_used = "gemini", "gemini-3.1-flash-lite"
 
     flags = _merge_flags((ai or {}).get("flags") or [], heur["flags"])
     categories = heur["categories"]
@@ -1011,9 +1087,13 @@ def _fallback_summary(heur: dict, flags: list, level: str, score: int = 50) -> l
         out.append("No user-friendly protections were found in the text — no clear right to export, delete or opt out.")
 
     # 4. Provenance, so it's clear this was a rules scan and not an AI reading.
+    if _is_public_mode():
+        ai_tip = "Opt in to the optional AI summary on a website scan for a fuller walkthrough."
+    else:
+        ai_tip = "Add an API key in settings for a full plain-English walkthrough."
     out.append(
         f"{stats['words']:,} words, about {stats['reading_time_min']} min of reading. "
-        f"Rules-based scan ({score}/100) — add an API key in settings for a full plain-English walkthrough."
+        f"Rules-based scan ({score}/100) — {ai_tip}"
     )
     return out[:6]
 

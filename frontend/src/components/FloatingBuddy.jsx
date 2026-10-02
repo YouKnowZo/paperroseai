@@ -1,311 +1,134 @@
 import { useEffect, useRef, useState } from "react";
 import Mascot from "./Mascot.jsx";
-import { analyzeUrl } from "../lib/api.js";
-import { speak, speakOrQueue, isMuted, setMuted, isVoiceSupported, hasUnlocked, onFirstUnlock, onMuteChange } from "../lib/voice.js";
-import { playEarcon } from "../lib/chimes.js";
+import Icon from "./Icon.jsx";
+import { getVoicePreferences, isMuted, isVoiceSupported, onMuteChange, onVoiceChange, onVoicesChange, setMuted, setVoiceByName, setVoiceRate, setVoiceStyle, speak, stopSpeaking, VOICE_STYLES } from "../lib/voice.js";
 
-/**
- * FloatingBuddy — a little robot that lives in the corner of the screen.
- * - Draggable anywhere; click to expand its mini-report panel
- * - Narrates what it's doing via speech bubble
- * - Auto-scrapes: ?url=... query param or "Analyze current page" button
- *   (bookmarklet mode: ?url= automatically runs on load)
- */
-
-const NARRATION = {
-  idle: "Hey! I read the fine print so you don't have to.",
-  working: "Scanning this page for you…",
-  reading: "Reading every clause…",
-  done_safe: "Good news — this one looks pretty fair!",
-  done_moderate: "Mostly fair, but there are things you should know.",
-  done_caution: "Careful — this agreement waives some of your rights.",
-  done_dangerous: "⚠️ Red flags everywhere! Read this before you agree.",
-  error: "Ouch — I couldn't read that page. Try pasting the URL instead.",
-};
-
-const LEVELS = {
-  safe: { emoji: "🟢", label: "Safe", color: "#10b981" },
-  moderate: { emoji: "🟡", label: "Moderate", color: "#f59e0b" },
-  caution: { emoji: "🟠", label: "Caution", color: "#f97316" },
-  dangerous: { emoji: "🔴", label: "High Risk", color: "#ef4444" },
-};
-
-function gradeColor(score) {
-  if (score >= 75) return "#10b981";
-  if (score >= 55) return "#f59e0b";
-  if (score >= 35) return "#f97316";
-  return "#ef4444";
+function clampPosition(pos) {
+  return { x: Math.max(12, Math.min(pos.x, window.innerWidth - 88)), y: Math.max(12, Math.min(pos.y, window.innerHeight - 100)) };
+}
+function initialPosition() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("pr-buddy-pos"));
+    if (Number.isFinite(saved?.x) && Number.isFinite(saved?.y)) return clampPosition(saved);
+  } catch { /* stale or unavailable storage */ }
+  return clampPosition({ x: window.innerWidth - 108, y: window.innerHeight - 116 });
 }
 
-/** Spoken lines: emoji stripped, contractions expanded for better TTS. */
-function spoken(line) {
-  return line
-    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, "")
-    .replace(/[\u{FE0F}]/gu, "")
-    .replace(/\bdon't\b/g, "do not")
-    .replace(/\bcan't\b/g, "cannot")
-    .replace(/\bwon't\b/g, "will not")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/** Verdict line for a finished scan — grade, worst clause, flag counts. */
-function verdictLine(data) {
-  const highs = (data.flags || []).filter((f) => f.severity === "high");
-  const worst = highs[0]?.title || (data.flags || [])[0]?.title;
-  const gradeWord = { A: "an A", B: "a B", C: "a C", D: "a D", F: "an F" }[data.grade?.[0]] || data.grade;
-  let line = `I give this ${gradeWord}`;
-  if (data.grade?.startsWith("A") && !data.grade.endsWith("+")) line = `I give this a straight ${data.grade}`;
-  line += worst ? `. Biggest thing to know: ${worst}.` : ". Nothing alarming jumped out.";
-  if (highs.length > 1) line += ` Plus ${highs.length - 1} more high-severity ${highs.length === 2 ? "issue" : "issues"}.`;
-  return line;
-}
-
-export default function FloatingBuddy({ autoScanUrl }) {
-  const [pos, setPos] = useState(() => {
-    const saved = JSON.parse(localStorage.getItem("pr-buddy-pos") || "null");
-    return saved || { x: window.innerWidth - 110, y: window.innerHeight - 130 };
-  });
-  const [dragging, setDragging] = useState(false);
+export default function FloatingBuddy({ result, busy, onNewScan }) {
+  const [pos, setPos] = useState(initialPosition);
   const [expanded, setExpanded] = useState(false);
-  const [mood, setMood] = useState("idle");
-  const [result, setResult] = useState(null);
-  const [progress, setProgress] = useState(0);
-  const [zappedUrl, setZappedUrl] = useState("");
-  const dragOffset = useRef({ x: 0, y: 0 });
-  const didAutoScan = useRef(false);
-  const [muted, setMutedState] = useState(isMuted());
-  const [voiceReady, setVoiceReady] = useState(false);
-  const lastSpoken = useRef("");
+  const [dragging, setDragging] = useState(false);
+  const [muted, setMutedState] = useState(isMuted);
+  const [preferences, setPreferences] = useState(getVoicePreferences);
+  const [voices, setVoices] = useState([]);
+  const drag = useRef(null);
+  const closeRef = useRef(null);
+  const launcherRef = useRef(null);
+  const supported = isVoiceSupported();
 
-  const voiceSupported = isVoiceSupported();
-
-  // If mute was set from another website (bookmarklet) or tab, follow it here.
+  useEffect(() => onMuteChange(setMutedState), []);
+  useEffect(() => onVoiceChange(setPreferences), []);
+  useEffect(() => onVoicesChange(setVoices), []);
   useEffect(() => {
-    if (!voiceSupported) return;
-    return onMuteChange(setMutedState);
-  }, [voiceSupported]);
-
-  // Give the TTS engine a moment to populate voices, then allow speech.
+    const resize = () => setPos((current) => clampPosition(current));
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, []);
   useEffect(() => {
-    if (!voiceSupported) return;
-    const t = setTimeout(() => setVoiceReady(true), 800);
-    return () => clearTimeout(t);
-  }, [voiceSupported]);
+    if (!expanded) return;
+    closeRef.current?.focus();
+    const escape = (event) => { if (event.key === "Escape") { event.stopPropagation(); closePanel(); } };
+    window.addEventListener("keydown", escape);
+    return () => window.removeEventListener("keydown", escape);
+  }, [expanded]);
 
-  // ---------- auto-scrape on load (?url=...) ----------
-  useEffect(() => {
-    if (autoScanUrl && !didAutoScan.current) {
-      didAutoScan.current = true;
-      runScan(autoScanUrl, true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoScanUrl]);
-
-  // ---------- dragging ----------
-  useEffect(() => {
-    if (!dragging) return;
-    function move(e) {
-      const x = Math.min(Math.max(8, e.clientX - dragOffset.current.x), window.innerWidth - 84);
-      const y = Math.min(Math.max(8, e.clientY - dragOffset.current.y), window.innerHeight - 84);
-      setPos({ x, y });
-    }
-    function up() {
-      setDragging(false);
-      setPos((p) => {
-        localStorage.setItem("pr-buddy-pos", JSON.stringify(p));
-        return p;
-      });
-    }
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", up);
-    return () => {
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mouseup", up);
-    };
-  }, [dragging]);
-
-  function onDragStart(e) {
-    dragOffset.current = { x: e.clientX - pos.x, y: e.clientY - pos.y };
+  function closePanel() { setExpanded(false); launcherRef.current?.focus(); }
+  function toggleMuted() { setMuted(!muted); }
+  function pointerDown(event) {
+    if (event.button !== 0) return;
+    drag.current = { x: event.clientX, y: event.clientY, origin: pos, moved: false };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+  function pointerMove(event) {
+    if (!drag.current) return;
+    const dx = event.clientX - drag.current.x;
+    const dy = event.clientY - drag.current.y;
+    if (Math.abs(dx) + Math.abs(dy) > 6) drag.current.moved = true;
+    if (!drag.current.moved) return;
     setDragging(true);
+    setPos(clampPosition({ x: drag.current.origin.x + dx, y: drag.current.origin.y + dy }));
+  }
+  function pointerUp(event) {
+    if (!drag.current) return;
+    const moved = drag.current.moved;
+    drag.current = null;
+    setDragging(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    if (!moved) setExpanded((value) => !value);
+    try { localStorage.setItem("pr-buddy-pos", JSON.stringify(pos)); } catch { /* noop */ }
+  }
+  function previewVoice() {
+    setMuted(false);
+    speak("Hi, I’m Rose, your fine-print guide. PaperRose AI, by Paperbagexpress. Let’s make the small print clear.");
+  }
+  function readReport() {
+    if (!result) return;
+    setMuted(false);
+    speak(`Your fairness grade is ${result.grade}. ${(result.plain_summary || []).slice(0, 4).join(" ")} ${result.flags?.length ? `The main issue to review is ${result.flags[0].title}.` : "No known red flags were found, but please review the agreement yourself."}`);
   }
 
-  // ---------- scanning ----------
-  async function runScan(url, auto = false) {
-    setZappedUrl(url);
-    setResult(null);
-    setProgress(10);
-    if (!auto) setExpanded(true);
-    const timer = setInterval(() => setProgress((p) => (p < 85 ? p + 9 : p)), 400);
-    try {
-      const data = await analyzeUrl(url);
-      setResult(data);
-      setProgress(100);
-      setMood(`done_${data.safety_level}`);
-      if (auto) setExpanded(true);
-      playEarcon(data.safety_level);
-      speak(spoken(verdictLine(data)), { pitch: data.safety_level === "dangerous" ? 1.35 : 1.25 });
-    } catch {
-      setMood("error");
-      playEarcon("error");
-      speak("Sorry, I could not read that page. Try pasting the URL instead.");
-    } finally {
-      clearInterval(timer);
-      setTimeout(() => setProgress(0), 1200);
-    }
-  }
+  const panelWidth = Math.min(360, window.innerWidth - 24);
+  const panelLeft = Math.max(12, Math.min(pos.x - panelWidth - 12, window.innerWidth - panelWidth - 12));
+  const panelTop = Math.max(12, Math.min(pos.y - 400, window.innerHeight - Math.min(600, window.innerHeight - 24) - 12));
+  const narration = busy ? "Reading the fine print…" : result ? `Your report is ready. Grade ${result.grade}.` : "Small print. Big clarity.";
+  const selectedVoice = voices.some((voice) => voice.voiceURI === preferences.voice || voice.name === preferences.voice) ? preferences.voice : "";
 
-  const busy = progress > 0 && progress < 100;
-  const narrating = mood.startsWith("done") || mood === "error";
-  const level = result ? LEVELS[result.safety_level] : null;
-  const narration = busy
-    ? progress < 50 ? NARRATION.working : NARRATION.reading
-    : NARRATION[mood] || NARRATION.idle;
-
-  // Speak whenever the narration line changes (and we're allowed to).
-  // If the gesture gate blocked us, retry the same line on first unlock.
-  useEffect(() => {
-    if (!voiceSupported || !voiceReady) return;
-    const line = spoken(narration);
-    if (!line || line === lastSpoken.current) return;
-    lastSpoken.current = line;
-    if (!speakOrQueue(line)) {
-      onFirstUnlock(() => {
-        if (!isMuted() && lastSpoken.current === line) speak(line);
-      });
-    }
-  }, [narration, voiceReady, voiceSupported]);
-
-  return (
-    <>
-      {/* ------- expanded panel ------- */}
-      {expanded && (() => {
-        const panelW = Math.min(320, window.innerWidth - 24);
-        const panelH = Math.min(560, window.innerHeight - 24);
-        // Prefer sitting beside the buddy; flip to the other side if cramped.
-        const leftIfRight = pos.x + 80;
-        const leftIfLeft = pos.x - panelW - 16;
-        const left = leftIfLeft >= 12 ? leftIfLeft
-          : leftIfRight + panelW <= window.innerWidth - 12 ? leftIfRight
-          : Math.max(12, (window.innerWidth - panelW) / 2);
-        const top = Math.max(12, Math.min(pos.y - 60, window.innerHeight - panelH - 12));
-        return (
-        <div
-          className="buddy-panel"
-          style={{ left, top }}
-        >
-          <div className="buddy-panel-head">
-            <strong>Buddy report</strong>
-            <button className="buddy-close" onClick={() => setExpanded(false)}>×</button>
-          </div>
-
-          {busy && (
-            <div className="buddy-scan">
-              <div className="buddy-mini-bot"><Mascot size={44} mood="thinking" className="" /></div>
-              <p>{narration}</p>
-              <div className="progress-track"><div className="progress-fill" style={{ width: `${progress}%` }} /></div>
-            </div>
-          )}
-
-          {!busy && result && (
-            <>
-              <div className="buddy-verdict">
-                <div className="buddy-grade" style={{ color: gradeColor(result.score) }}>{result.grade}</div>
-                <div>
-                  <span className="buddy-level" style={{ color: level.color }}>{level.emoji} {level.label}</span>
-                  <div className="buddy-url">{zappedUrl.replace(/^https?:\/\//, "").slice(0, 42)}</div>
-                </div>
-              </div>
-              <ul className="buddy-summary">
-                {result.plain_summary.slice(0, 3).map((s, i) => <li key={i}>{s}</li>)}
-              </ul>
-              {result.flags?.length > 0 && (
-                <div className="buddy-flags">
-                  <strong>Top red flags</strong>
-                  {result.flags.slice(0, 3).map((f, i) => (
-                    <div className="buddy-flag" key={i}>
-                      <span className={`sev-badge sev-${f.severity}`}>{f.severity}</span> {f.title}
-                    </div>
-                  ))}
-                </div>
-              )}
-              <button
-                className="btn btn-primary buddy-open-full"
-                onClick={() => {
-                  // Ask the main app to render the full report for this URL
-                  window.dispatchEvent(new CustomEvent("pr:analyze", { detail: { type: "url", value: zappedUrl } }));
-                  setExpanded(false);
-                }}
-              >
-                Open full report ↗
-              </button>
-            </>
-          )}
-
-          {!busy && !result && (
-            <div className="buddy-scan">
-              <p>Give me a page to read — or zap the current website with the button below.</p>
-            </div>
-          )}
-
-          <button
-            className="btn btn-ghost buddy-zap"
-            disabled={busy}
-            onClick={() => {
-              const u = window.prompt("Which page should I scan?", window.location.href.startsWith("http") && !window.location.href.includes("localhost") ? window.location.href : "https://");
-              if (u && u !== "https://") runScan(u);
-            }}
-          >
-            ⚡ Zap current page
-          </button>
-        </div>
-        );
-      })()}
-
-      {/* ------- the buddy itself ------- */}
-      <div className="buddy-anchor" style={{ left: pos.x, top: pos.y }}>
-        {!expanded && narrating && !busy && (
-          <div className="buddy-bubble">{narration}</div>
-        )}
-        {busy && <div className="buddy-bubble buddy-bubble-think">{narration}</div>}
-        {voiceSupported && (
-          <button
-            className={`buddy-mute ${muted ? "muted" : ""}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              const next = !muted;
-              setMutedState(next);
-              setMuted(next);
-              if (!next) {
-                // audible confirmation that the buddy can hear/speak again
-                speak("Voice on!");
-              }
-            }}
-            title={muted ? "Buddy is muted — click to hear me" : "Buddy voice on — click to mute"}
-            aria-label={muted ? "Unmute buddy voice" : "Mute buddy voice"}
-          >
-            {muted ? "🔇" : "🔊"}
-          </button>
-        )}
-        <div
-          className={`buddy-bot ${dragging ? "dragging" : ""} ${busy ? "busy" : ""}`}
-          onMouseDown={onDragStart}
-          onClick={() => !dragging && setExpanded((v) => !v)}
-          onContextMenu={(e) => {
-            if (voiceSupported) {
-              e.preventDefault();
-              const next = !muted;
-              setMutedState(next);
-              setMuted(next);
-              if (!next) speak("Voice on!");
-            }
-          }}
-          title="Drag me anywhere · click for my report"
-        >
-          <Mascot size={64} mood={busy ? "thinking" : "happy"} className="" />
-          {busy && <div className="buddy-scanline" />}
-        </div>
+  return <>
+    {expanded && <section className="buddy-panel" style={{ left: panelLeft, top: panelTop }} role="dialog" aria-label="Rose assistant">
+      <div className="buddy-panel-head">
+        <div className="buddy-identity"><Mascot size={48} className="" /><div><strong>Meet Rose</strong><small>Your fine-print guide</small></div></div>
+        <button ref={closeRef} className="buddy-close" onClick={closePanel} aria-label="Close assistant"><Icon name="close" size={16} /></button>
       </div>
-    </>
-  );
+      <div className="buddy-intro"><span className="buddy-online-dot" />{narration}</div>
+      {result ? <div className="buddy-report-preview">
+        <span className={`buddy-report-grade level-${result.safety_level}`}>{result.grade}</span>
+        <div><strong>{result.flags?.length || 0} flags to review</strong><p>{result.plain_summary?.[0]}</p></div>
+      </div> : <p className="buddy-description">I help you navigate agreements and read your report aloud. Start with a link, pasted text, or a document.</p>}
+      <div className="buddy-actions">
+        {result && supported && <button className="btn btn-primary" onClick={readReport}><Icon name="volume" size={17} /> Read my report</button>}
+        <button className="btn btn-ghost" disabled={busy} onClick={() => { closePanel(); onNewScan(); }}><Icon name="sparkles" size={17} /> {result ? "New scan" : "Start a scan"}</button>
+      </div>
+      <div className="voice-settings">
+        <h3><Icon name="volume" size={18} /> Make Rose sound like you</h3>
+        {supported ? <>
+          <label htmlFor="buddy-voice">Voice</label>
+          <select id="buddy-voice" value={selectedVoice} onChange={(event) => setVoiceByName(event.target.value)}>
+            <option value="">Automatic · best available</option>
+            {voices.map((voice) => <option key={`${voice.voiceURI}-${voice.lang}`} value={preferences.voice === voice.name ? voice.name : voice.voiceURI}>{voice.name} · {voice.lang}{voice.localService ? " · on-device" : ""}</option>)}
+          </select>
+          <label htmlFor="buddy-style">Personality</label>
+          <select id="buddy-style" value={preferences.style} onChange={(event) => setVoiceStyle(event.target.value)}>
+            {Object.entries(VOICE_STYLES).map(([key, style]) => <option key={key} value={key}>{style.label}</option>)}
+          </select>
+          <label htmlFor="buddy-speed">Speaking speed <span>{preferences.rate.toFixed(1)}×</span></label>
+          <input id="buddy-speed" type="range" min="0.7" max="1.3" step="0.1" value={preferences.rate} onChange={(event) => setVoiceRate(event.target.value)} />
+          <div className="voice-preview-actions">
+            <button className="btn btn-ghost btn-sm" onClick={previewVoice}><Icon name="play" size={15} /> Preview voice</button>
+            <button className="btn btn-ghost btn-sm" onClick={stopSpeaking}><Icon name="stop" size={15} /> Stop</button>
+            <button className="btn btn-ghost btn-sm" onClick={toggleMuted}>{muted ? "Unmute" : "Mute"}</button>
+          </div>
+          <p className="voice-note">Voices depend on your browser and device. {voices.length ? "Settings are saved on this device." : "Device voices are loading; automatic speech is available if your browser supports it."} Some system voices use your browser’s speech service.</p>
+        </> : <p className="voice-note">Speech isn’t available in this browser. Rose still shows your report and helps you navigate.</p>}
+      </div>
+      <div className="buddy-credit">PaperRoseAI <strong>by Paperbagexpress</strong></div>
+    </section>}
+    <div className="buddy-anchor" style={{ left: pos.x, top: pos.y }}>
+      {supported && <button className={`buddy-mute ${muted ? "muted" : ""}`} onClick={toggleMuted} title={muted ? "Unmute Rose" : "Mute Rose"} aria-label={muted ? "Unmute Rose" : "Mute Rose"}><Icon name={muted ? "mute" : "volume"} size={16} /></button>}
+      <button ref={launcherRef} className={`buddy-bot ${dragging ? "dragging" : ""} ${busy ? "busy" : ""}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={() => { drag.current = null; setDragging(false); }} onClick={(event) => { if (event.detail === 0) setExpanded((value) => !value); }} aria-label="Open Rose assistant and voice settings" aria-expanded={expanded} title="Meet Rose · drag to move">
+        <Mascot size={76} mood={busy ? "thinking" : "happy"} className="" />
+        {busy && <div className="buddy-scanline" />}
+      </button>
+      <span className="buddy-name">Rose <span /></span>
+    </div>
+  </>;
 }

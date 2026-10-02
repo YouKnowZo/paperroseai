@@ -47,7 +47,7 @@ PROVIDERS = {
         "env": "GEMINI_API_KEY",
         "base_env": "GEMINI_BASE_URL",
         "default_base": "https://generativelanguage.googleapis.com/v1beta",
-        "model": "gemini-2.0-flash",
+        "model": "gemini-3.1-flash-lite",
         "hint": "AIza…",
         "console": "https://aistudio.google.com/app/apikey",
     },
@@ -257,8 +257,12 @@ def probe(provider: str, key: str) -> dict:
                 headers={"Authorization": f"Bearer {key}"},
                 timeout=PROBE_TIMEOUT,
             )
-        else:
-            resp = requests.get(f"{base}/models", params={"key": key}, timeout=PROBE_TIMEOUT)
+        elif provider == "gemini":
+            resp = requests.get(
+                f"{base}/models",
+                headers={"x-goog-api-key": key},
+                timeout=PROBE_TIMEOUT,
+            )
     except requests.exceptions.RequestException as e:
         return {
             "valid": False,

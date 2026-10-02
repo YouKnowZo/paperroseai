@@ -170,7 +170,7 @@ function ProviderRow({ status, meta, onChanged, onNote }) {
   );
 }
 
-export default function SettingsModal({ onClose, onNote }) {
+export default function SettingsModal({ publicMode = true, onClose, onNote }) {
   const [data, setData] = useState(null);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState("");
@@ -181,7 +181,7 @@ export default function SettingsModal({ onClose, onNote }) {
       setData(base);
       // Verify configured keys — an expired key should be visible immediately,
       // not twenty seconds into an analysis.
-      if (verify && Object.values(base.providers).some((p) => p.configured)) {
+      if (verify && !publicMode && base.public_mode !== true && Object.values(base.providers).some((p) => p.configured)) {
         setChecking(true);
         const checked = await checkKeys();
         setData((prev) => ({ ...prev, ...checked, config: prev?.config || checked.config }));
@@ -189,7 +189,7 @@ export default function SettingsModal({ onClose, onNote }) {
       }
     } catch (e) {
       setError(e.message || "Couldn't reach the backend.");
-    }
+    } finally { setChecking(false); }
   }
 
   useEffect(() => {
@@ -208,12 +208,12 @@ export default function SettingsModal({ onClose, onNote }) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label="AI settings" onClick={(e) => e.stopPropagation()}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label={publicMode ? "Privacy and analysis settings" : "AI settings"} onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <div>
-            <h2>AI settings</h2>
+            <h2>{publicMode ? "Your privacy, first" : "AI settings"}</h2>
             <p className="modal-sub">
-              Paste a provider key to unlock real AI summaries. No .env editing, no restart.
+              {publicMode ? "Understand what’s processed and how your report is created." : "Paste a provider key to unlock AI summaries. No restart needed."}
             </p>
           </div>
           <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Close settings">
@@ -233,13 +233,13 @@ export default function SettingsModal({ onClose, onNote }) {
             </span>
           ) : (
             <span>
-              <strong>Rules engine</strong> — works offline and free, but no AI summaries yet
+              <strong>Rules engine</strong> — evidence-based clause detection and plain-English takeaways
             </span>
           )}
           {checking && <span className="engine-checking">testing saved keys…</span>}
         </div>
 
-        {data && (
+        {data && !publicMode && data.public_mode !== true && (
           <div className="providers">
             {["openai", "gemini"].map((id) => (
               <ProviderRow
@@ -259,13 +259,18 @@ export default function SettingsModal({ onClose, onNote }) {
 
         <div className="modal-foot">
           <p>
-            Keys are stored on this machine only (<code>{data?.keys_path || "backend/keys.json"}</code>) and are
-            sent to nobody but the provider you picked. Everything else stays local.
+            {publicMode || data?.public_mode
+              ? data.free_ai_configured
+                ? "Website text is sent to Cloudflare Workers AI only when you opt in on that scan. Cloudflare states customer content is not used to train or improve its models. Pasted text and uploads stay on the rules-only path."
+                : "Public mode protects provider keys. Website scans use rules-only analysis until the site owner configures an AI provider. Pasted text and uploads are never sent to hosted AI."
+              : <>Keys are stored on this machine only (<code>{data?.keys_path || "backend/keys.json"}</code>) and are sent to nobody but the provider you picked. Everything else stays local.</>}
           </p>
           <div className="modal-actions">
-            <button className="btn btn-ghost" onClick={() => load({ verify: true })} disabled={checking}>
-              {checking ? "Testing…" : "Test my keys"}
-            </button>
+            {!publicMode && data && !data.public_mode && (
+              <button className="btn btn-ghost" onClick={() => load({ verify: true })} disabled={checking}>
+                {checking ? "Testing…" : "Test my keys"}
+              </button>
+            )}
             <button className="btn btn-primary" onClick={onClose}>
               Done
             </button>

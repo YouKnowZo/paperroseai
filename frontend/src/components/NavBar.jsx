@@ -6,10 +6,12 @@
 // the complaint: a finished report is long, and there was no way to move around
 // inside it without scrolling.
 
+import Icon from "./Icon.jsx";
+
 const SECTIONS = [
-  { id: "summary", label: "Summary", icon: "💬" },
-  { id: "categories", label: "Categories", icon: "🧭" },
-  { id: "flags", label: "Red flags", icon: "🚩" },
+  { id: "summary", label: "Summary", icon: "message" },
+  { id: "categories", label: "Categories", icon: "shield" },
+  { id: "flags", label: "Red flags", icon: "flag" },
 ];
 
 export default function NavBar({
@@ -33,7 +35,7 @@ export default function NavBar({
           title={canGoBack ? "Back to the previous screen (Alt+←)" : "Nothing to go back to"}
           aria-label="Go back"
         >
-          <span aria-hidden="true">←</span>
+          <Icon name="back" size={16} />
           <span className="nav-label">Back</span>
         </button>
         <button
@@ -44,7 +46,7 @@ export default function NavBar({
           title={canGoForward ? "Forward to the next screen (Alt+→)" : "Nothing to go forward to"}
           aria-label="Go forward"
         >
-          <span aria-hidden="true">→</span>
+          <Icon name="arrow" size={16} />
           <span className="nav-label">Forward</span>
         </button>
 
@@ -57,7 +59,7 @@ export default function NavBar({
           title="Start a new scan — this report stays in your history"
           aria-label="Start a new scan"
         >
-          <span aria-hidden="true">⌂</span>
+          <Icon name="home" size={16} />
           <span className="nav-label">New scan</span>
         </button>
 
@@ -73,7 +75,7 @@ export default function NavBar({
                   onClick={() => onJump(s.id)}
                   title={`Jump to ${s.label.toLowerCase()}`}
                 >
-                  <span aria-hidden="true">{s.icon}</span>
+                  <Icon name={s.icon} size={16} />
                   <span>{s.label}</span>
                 </button>
               ))}
@@ -85,7 +87,7 @@ export default function NavBar({
               title="Close this report and forget it (Esc)"
               aria-label="Close this report"
             >
-              <span aria-hidden="true">✕</span>
+              <Icon name="close" size={16} />
               <span className="nav-label">Exit</span>
             </button>
           </>

@@ -16,15 +16,21 @@ export default function Mascot({ size = 40, mood = "happy", className = "logo" }
       <path d="M82 77c10 1 17 7 21 16l-8 7-18-13" fill="#38445B" stroke="#20283A" strokeWidth="3" strokeLinejoin="round" />
       <path d="M37 73c7-5 15-8 23-8s17 3 23 8l10 39c-20 7-47 7-67 0l11-39Z" fill="#242A40" stroke="#20283A" strokeWidth="3" strokeLinejoin="round" />
 
-      {/* Robot head and ear pieces */}
-      <rect x="16" y="43" width="13" height="18" rx="6.5" fill="#D6A94F" stroke="#20283A" strokeWidth="3" />
-      <rect x="91" y="43" width="13" height="18" rx="6.5" fill="#D6A94F" stroke="#20283A" strokeWidth="3" />
+      {/* Polished robot head, rose-gold ears and illuminated face */}
+      <rect x="16" y="43" width="13" height="18" rx="6.5" fill="#E7B48A" stroke="#20283A" strokeWidth="3" />
+      <rect x="91" y="43" width="13" height="18" rx="6.5" fill="#E7B48A" stroke="#20283A" strokeWidth="3" />
       <rect x="24" y="27" width="72" height="49" rx="16" fill="#FFF9F3" stroke="#20283A" strokeWidth="3" />
-      <rect x="32" y="35" width="56" height="33" rx="11" fill="#DDF3EF" />
+      <rect x="32" y="35" width="56" height="33" rx="11" fill="#D4F5EF" />
       <circle cx="45" cy="51" r="7" fill="white" />
       <circle cx="75" cy="51" r="7" fill="white" />
-      <circle cx="45" cy="51" r="3.3" fill="#263244" style={eyeStyle} />
-      <circle cx="75" cy="51" r="3.3" fill="#263244" style={eyeStyle} />
+      <g className="mascot-eyes" style={eyeStyle}>
+        <circle cx="45" cy="51" r="4" fill="#263244" />
+        <circle cx="75" cy="51" r="4" fill="#263244" />
+        <circle cx="46" cy="49.5" r="1.3" fill="#FFFFFF" />
+        <circle cx="76" cy="49.5" r="1.3" fill="#FFFFFF" />
+      </g>
+      <ellipse cx="37" cy="59" rx="4" ry="2" fill="#F2A3AA" opacity="0.7" />
+      <ellipse cx="83" cy="59" rx="4" ry="2" fill="#F2A3AA" opacity="0.7" />
       <path d="M53 62c4 3 10 3 14 0" stroke="#263244" strokeWidth="2.5" strokeLinecap="round" />
 
       {/* Legal-scribe collar, tie and scales-of-justice badge */}
@@ -34,7 +40,7 @@ export default function Mascot({ size = 40, mood = "happy", className = "logo" }
       <g stroke="#E7BD65" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
         <path d="M79 96v9m-6-7h12m-10 0-3 5h6l-3-5Zm8 0-3 5h6l-3-5ZM75 106h8" />
       </g>
-      <text x="59" y="114" textAnchor="middle" fill="#FFF9F3" fontFamily="Arial, sans-serif" fontSize="7.2" fontWeight="700" textLength="58" lengthAdjust="spacingAndGlyphs">PaperRoseAI</text>
+      <path d="M41 111h32" stroke="#E7B48A" strokeWidth="2" strokeLinecap="round" opacity="0.65" />
 
       {/* Red rose worn above the scribe's head */}
       <path d="M60 30c0-5-1-8 0-12" stroke="#26734D" strokeWidth="3" strokeLinecap="round" />
