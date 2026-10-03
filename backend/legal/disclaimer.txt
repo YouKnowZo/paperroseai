@@ -1,0 +1,11 @@
+PaperRoseAI is an automated reading aid, not a lawyer and not legal advice.
+
+The Service analyzes text you provide and may produce grades, summaries, and risk flags that are informational only. Results can be wrong, incomplete, outdated, or missing important context. Do not sign, spend, or litigate based only on what the Service says. Read the document yourself and consult a qualified attorney for anything that matters.
+
+PaperBagExpress provides the Service "as is" and "as available," without any warranty of accuracy, completeness, reliability, or fitness for a particular purpose, to the maximum extent permitted by law. We do not guarantee any specific uptime, quota, or availability. We are not responsible for damages arising from your use of, or reliance on, the Service, including decisions you make based on its output.
+
+Optional AI features, where available, are offered only after you choose to enable them for a specific scan. AI results are not guaranteed and may be wrong or misleading. Any third-party AI provider used for an optional feature has its own terms and privacy practices.
+
+If you use the Service, you accept these limits and the full Terms of Service. If you do not accept them, do not use the Service.
+
+This notice is a draft for review by a qualified attorney and is not legal advice.

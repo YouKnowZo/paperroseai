@@ -17,6 +17,7 @@ const paths = {
   home: <><path d="m3 10 9-7 9 7M5 9v12h14V9" /><path d="M9 21v-7h6v7" /></>,
   check: <path d="m5 12 4 4L19 6" />,
   upload: <><path d="M12 16V3m-5 5 5-5 5 5M4 16v5h16v-5" /></>,
+  download: <><path d="M12 3v13m-5-5 5 5 5-5M4 20h16" /></>,
   play: <path d="m8 4 12 8-12 8V4Z" />,
   stop: <rect x="5" y="5" width="14" height="14" rx="2" />,
   scales: <><path d="M12 3v18M4 7h16M8 21h8M6 7l-4 8h8L6 7Zm12 0-4 8h8l-4-8Z" /></>,

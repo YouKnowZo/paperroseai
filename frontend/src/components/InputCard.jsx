@@ -3,11 +3,13 @@ import TurnstileWidget from "./TurnstileWidget.jsx";
 import Icon from "./Icon.jsx";
 
 export default function InputCard({ busy, onAnalyze, publicMode = false, freeAIAvailable = false, turnstileSiteKey = "", turnstileReady = false, initialUrl = "", backendReady = false }) {
-  const [mode, setMode] = useState("url"); // url | paste | upload
+  const [mode, setMode] = useState(() => new URLSearchParams(window.location.search).get("extension") === "1" ? "paste" : "url"); // url | paste | upload
   const [url, setUrl] = useState(initialUrl);
   const [allowFreeAI, setAllowFreeAI] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState("");
   const [turnstileError, setTurnstileError] = useState("");
+  const [extensionHandoff, setExtensionHandoff] = useState(() => new URLSearchParams(window.location.search).get("extension") === "1");
+  const [extensionMessage, setExtensionMessage] = useState("");
   const turnstileRef = useRef(null);
   const tokenRef = useRef("");
   const setToken = (token) => {
@@ -63,6 +65,19 @@ export default function InputCard({ busy, onAnalyze, publicMode = false, freeAIA
       (mode === "paste" && text.trim().length > 100) ||
       (mode === "upload" && file));
 
+  async function pasteExtensionText() {
+    try {
+      const copied = await navigator.clipboard.readText();
+      if (!copied.trim()) throw new Error("Clipboard is empty. Go back to your browser tab, click the extension, and try again.");
+      setText(copied.trim().slice(0, 60000));
+      setExtensionMessage("Page text pasted. Review it below, then choose Analyze text.");
+      setExtensionHandoff(false);
+    } catch (error) {
+      setExtensionMessage(error?.message || "Clipboard access was blocked. Click the text box and paste with Ctrl+V or ⌘V.");
+      setMode("paste");
+    }
+  }
+
   async function submit() {
     if (!canSubmit) return;
     const token = turnstileToken;
@@ -91,6 +106,7 @@ export default function InputCard({ busy, onAnalyze, publicMode = false, freeAIA
   return (
     <div className="input-card">
       <div className="input-card-heading"><div><span className="section-kicker">THE CLARITY DESK</span><h2>What are we reading today?</h2></div><span className="input-private"><Icon name="shield" size={15} /> No account needed</span></div>
+      <p className="input-legal-note">Not legal advice. This automated reading aid can miss nuance or be wrong — skim the document and consult a qualified attorney for anything that matters.</p>
       {!backendReady && <p className="input-privacy-note" role="status">Connecting to the analysis service. If this continues, please reload the page.</p>}
       <div className="mode-tabs" aria-label="Input method">
         {tabs.map((t) => (
@@ -160,6 +176,8 @@ export default function InputCard({ busy, onAnalyze, publicMode = false, freeAIA
 
       {mode === "paste" && (
         <>
+          {extensionHandoff && <div className="extension-handoff"><div><strong>Your page is ready to review.</strong><span>The add-on copied visible page text. Paste it here; nothing is submitted until you press Analyze.</span></div><button type="button" className="btn btn-ghost btn-sm" onClick={pasteExtensionText}>Paste copied page</button></div>}
+          {extensionMessage && <p className="input-privacy-note" role="status">{extensionMessage}</p>}
           {publicMode && turnstileReady && <TurnstileWidget key={mode} ref={turnstileRef} siteKey={turnstileSiteKey} onToken={setToken} onError={setTurnstileError} />}
           {publicMode && !turnstileReady && <div className="input-privacy-note turnstile-status-error">Public scanning is temporarily unavailable while bot protection is being configured.</div>}
           <div className="textarea-wrap">

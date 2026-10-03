@@ -52,22 +52,11 @@ const BOOKMARKLET_SOURCE = String.raw
   function esc(s){ var d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
 
   /* ---------- voice (Web Speech API) ---------- */
-  var UNLOCKED = false, PENDING_SPEECH = null;
-  function unlockVoice(){
-    if (UNLOCKED) return;
-    UNLOCKED = true;
-    if (PENDING_SPEECH) { var line = PENDING_SPEECH; PENDING_SPEECH = null; say(line.text, line.opts); }
-  }
-  document.addEventListener("pointerdown", unlockVoice, true);
-  document.addEventListener("keydown", unlockVoice, true);
-  /* Clicking the bookmark itself is a user gesture — don't make the user click
-     again before the first verdict can speak. */
-  try { if (navigator.userActivation && (navigator.userActivation.isActive || navigator.userActivation.hasBeenActive)) unlockVoice(); } catch(e){}
   function cleanSpeech(line){
     return String(line).replace(/[\uD800-\uDFFF\u2600-\u27BF\uFE0F]/g, "").replace(/\bdon't\b/g, "do not").replace(/\bcan't\b/g, "cannot").replace(/\bwon't\b/g, "will not").replace(/\s+/g, " ").trim();
   }
   function say(text, opts){
-    if (MUTED || !UNLOCKED || !text || !("speechSynthesis" in window)) return false;
+    if (MUTED || !text || !("speechSynthesis" in window)) return false;
     try {
       window.speechSynthesis.cancel();
       var u = new SpeechSynthesisUtterance(cleanSpeech(text));
@@ -80,11 +69,6 @@ const BOOKMARKLET_SOURCE = String.raw
       window.speechSynthesis.speak(u);
       return true;
     } catch(e){ return false; }
-  }
-  function sayOrQueue(text, opts){
-    if (MUTED || !text) return false;
-    if (!UNLOCKED) { PENDING_SPEECH = { text: text, opts: opts }; return false; }
-    return say(text, opts);
   }
 
   /* ---------- earcons (Web Audio, no files) ---------- */
@@ -122,7 +106,7 @@ const BOOKMARKLET_SOURCE = String.raw
 
   /* ---------- mute toggle (persisted via the backend, shared across sites) ---------- */
   var MUTE_CSS = '<button class="bmute" type="button">' + (MUTED ? "\uD83D\uDD07" : "\uD83D\uDD0A") + "</button>";
-  function setMuted(m, announce){
+  function setMuted(m){
     MUTED = m; LOCAL_MUTED = m;
     try { if (m) localStorage.setItem("pr-buddy-muted", "1"); else localStorage.removeItem("pr-buddy-muted"); } catch(e){}
     try {
@@ -131,14 +115,13 @@ const BOOKMARKLET_SOURCE = String.raw
     fetch(API + "/api/buddy/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ muted: m }) }).catch(function(){});
     var btn = panel.querySelector(".bmute");
     if (btn) { btn.textContent = m ? "\uD83D\uDD07" : "\uD83D\uDD0A"; btn.title = m ? "Buddy is muted \u2014 click to hear me" : "Buddy voice on \u2014 click to mute"; }
-    if (!m && announce) say("Voice on!", { rate: 1.05 });
   }
   function wireMute(){
     var btn = panel.querySelector(".bmute");
     if (!btn) return;
     btn.textContent = MUTED ? "\uD83D\uDD07" : "\uD83D\uDD0A";
     btn.title = MUTED ? "Buddy is muted \u2014 click to hear me" : "Buddy voice on \u2014 click to mute";
-    btn.addEventListener("click", function(ev){ ev.stopPropagation(); setMuted(!MUTED, !MUTED); });
+    btn.addEventListener("click", function(ev){ ev.stopPropagation(); setMuted(!MUTED); });
   }
 
   function scrape(){
@@ -173,26 +156,26 @@ const BOOKMARKLET_SOURCE = String.raw
       return '<div class="flag"><span class="sev sev-'+f.severity+'">'+f.severity+'</span>'+esc(f.title)+'</div>';
     }).join("");
     var sum = (r.plain_summary||[]).slice(0,3).map(function(s){ return "<li>"+esc(s)+"</li>"; }).join("");
-    playChime(r.safety_level);
-    sayOrQueue(verdictLine(r), { pitch: r.safety_level === "dangerous" ? 1.35 : 1.25 });
     render(
       '<div class="head"><strong>Buddy report</strong><span class="bmute-slot"></span></div>'+
       '<div class="verdict"><div class="grade" style="color:'+c+'">'+esc(r.grade)+'</div>'+
       '<div><span class="lvl" style="color:'+c+'">'+L[0]+" "+L[1]+'</span><div class="meta">'+r.score+"/100 fairness</div></div></div>"+
       (sum ? '<ul class="sum">'+sum+"</ul>" : "")+
       (flags ? '<div class="fhead">Top red flags</div>'+flags : '<div class="ok">\u2705 No known predatory clauses found.</div>')+
+      '<button class="bread" type="button">Read report aloud</button><button class="bstop" type="button">Stop audio</button>'+
       '<div class="foot">Not legal advice \u00B7 rules engine</div>'
     );
     var slot = panel.querySelector(".bmute-slot");
     if (slot) slot.innerHTML = MUTE_CSS;
     wireMute();
+    panel.querySelector(".bread").addEventListener("click", function(){ setMuted(false); say(verdictLine(r)); });
+    panel.querySelector(".bstop").addEventListener("click", function(){ if ("speechSynthesis" in window) window.speechSynthesis.cancel(); });
     open();
   }
 
   function scan(){
     box.classList.add("busy");
     render('<div class="scan"><div class="spin"></div><p>Reading the fine print…</p></div>' + MUTE_CSS);
-    sayOrQueue("Scanning this page for you");
     wireMute();
     open();
     var text = scrape().slice(0, 60000);
@@ -205,8 +188,6 @@ const BOOKMARKLET_SOURCE = String.raw
     .then(function(data){
       box.classList.remove("busy");
       if (data.error) {
-        playChime("error");
-        sayOrQueue("Sorry, I could not read that page.");
         render('<div class="scan"><p>\u26A0\uFE0F '+esc(data.error)+"</p></div>" + MUTE_CSS);
         wireMute();
         return;
@@ -215,8 +196,6 @@ const BOOKMARKLET_SOURCE = String.raw
     })
     .catch(function(){
       box.classList.remove("busy");
-      playChime("error");
-      sayOrQueue("I can't reach PaperRoseAI. Is the backend running?");
       render('<div class="scan"><p>\u26A0\uFE0F Can\'t reach PaperRoseAI. Is the backend running on '+API+"?</p></div>" + MUTE_CSS);
       wireMute();
     });

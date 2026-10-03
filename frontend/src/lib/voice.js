@@ -1,12 +1,9 @@
-/** Browser speech only: preferences stay on this device; no hosted key required. */
+/** Manual browser speech only: no autoplay, queued narration, or scan sounds. */
 const MUTE_KEY = "pr-buddy-muted";
 const VOICE_KEY = "pr-buddy-voice";
 const STYLE_KEY = "pr-buddy-style";
 const RATE_KEY = "pr-buddy-rate";
 const supported = typeof window !== "undefined" && "speechSynthesis" in window;
-let unlocked = false;
-let queued = null;
-const unlockListeners = new Set();
 const muteListeners = new Set();
 const preferenceListeners = new Set();
 
@@ -25,7 +22,6 @@ export const VOICE_STYLES = {
 
 export function isVoiceSupported() { return supported; }
 export function isMuted() { return read(MUTE_KEY) === "1"; }
-export function hasUnlocked() { return unlocked; }
 export function getVoicePreferences() {
   const savedRate = Number(read(RATE_KEY) || 1);
   return {
@@ -45,7 +41,6 @@ export function setVoiceRate(rate) {
   notifyPreferences();
 }
 export function stopSpeaking() {
-  queued = null;
   if (supported) { try { window.speechSynthesis.cancel(); } catch { /* noop */ } }
 }
 export function setMuted(muted) {
@@ -73,12 +68,8 @@ function pickVoice() {
     || voices.find((v) => /google|samantha|zira|aria|jenny/i.test(v.name))
     || voices[0];
 }
-export function onFirstUnlock(cb) {
-  if (unlocked) cb(); else unlockListeners.add(cb);
-  return () => unlockListeners.delete(cb);
-}
 export function speak(text, opts = {}) {
-  if (!supported || isMuted() || !unlocked || !text) return false;
+  if (!supported || isMuted() || !text || window.navigator?.userActivation?.isActive === false) return false;
   try {
     window.speechSynthesis.cancel();
     const preferences = getVoicePreferences();
@@ -93,22 +84,9 @@ export function speak(text, opts = {}) {
     return true;
   } catch { return false; }
 }
-export function speakOrQueue(text, opts) {
-  if (!supported || isMuted() || !text) return false;
-  if (!unlocked) { queued = { text, opts }; return false; }
-  return speak(text, opts);
-}
-
 if (supported) {
-  const unlock = (event) => {
-    if (!event.isTrusted || unlocked) return;
-    unlocked = true;
-    if (queued) { const line = queued; queued = null; speak(line.text, line.opts); }
-    unlockListeners.forEach((cb) => cb());
-    unlockListeners.clear();
-  };
-  window.addEventListener("pointerdown", unlock);
-  window.addEventListener("keydown", unlock);
+  // Stop any narration still running from a previous page/session.
+  stopSpeaking();
   window.addEventListener("pagehide", stopSpeaking);
 }
 if (typeof window !== "undefined") {

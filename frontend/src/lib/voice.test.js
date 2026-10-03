@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import buildBookmarklet from "./bookmarklet.js";
 
 const storage = new Map();
 const events = new Map();
@@ -14,6 +16,7 @@ globalThis.localStorage = {
 };
 globalThis.window = {
   addEventListener: (name, callback) => events.set(name, callback),
+  navigator: { userActivation: { isActive: false } },
   SpeechSynthesisUtterance: class { constructor(text) { this.text = text; } },
   speechSynthesis: {
     getVoices: () => voices,
@@ -26,15 +29,22 @@ globalThis.window = {
 globalThis.fetch = () => { throw new Error("Voice preferences must not call the public backend"); };
 const voice = await import("./voice.js");
 
-test("speech waits for a trusted interaction and uses the selected voice", () => {
-  voices = [{ name: "Rose English", voiceURI: "rose-en", lang: "en-US", localService: true }, { name: "French", voiceURI: "fr", lang: "fr-FR" }];
+test("loading, preferences, and generic interactions never autoplay speech", () => {
+  voices = [{ name: "English voice", voiceURI: "test-en", lang: "en-US", localService: true }, { name: "French", voiceURI: "fr", lang: "fr-FR" }];
   assert.equal(voice.listVoices().length, 1);
-  voice.setVoiceByName("rose-en");
-  assert.equal(voice.speakOrQueue("Ready"), false);
-  events.get("pointerdown")({ isTrusted: false });
+  voice.setVoiceByName("test-en");
+  voice.setMuted(false);
   assert.equal(utterances.length, 0);
-  events.get("pointerdown")({ isTrusted: true });
-  assert.equal(utterances[0].voice.voiceURI, "rose-en");
+  assert.equal(voice.speak("No active playback request"), false);
+  assert.equal(events.has("pointerdown"), false);
+  assert.equal(events.has("keydown"), false);
+  assert.equal("speakOrQueue" in voice, false);
+  assert.equal(utterances.length, 0);
+});
+test("explicit playback uses the selected voice", () => {
+  window.navigator.userActivation.isActive = true;
+  assert.equal(voice.speak("Requested report playback"), true);
+  assert.equal(utterances[0].voice.voiceURI, "test-en");
 });
 test("styles and speed persist and affect narration", () => {
   voice.setVoiceStyle("bright");
@@ -67,6 +77,18 @@ test("late-loaded voices update subscribers and missing selection falls back", (
   assert.equal(utterances.at(-1).voice.voiceURI, "other-en");
   unsubscribe();
 });
+test("scan completion and bookmarklet scanning have no automatic audio calls", async () => {
+  const main = await readFile(new URL("../main.jsx", import.meta.url), "utf8");
+  assert.doesNotMatch(main, /speakOrQueue|playEarcon|\bspeak\s*\(/);
+  const assistant = await readFile(new URL("../components/FloatingBuddy.jsx", import.meta.url), "utf8");
+  assert.doesNotMatch(assistant, /\bRose\b|speakOrQueue/);
+  assert.equal((assistant.match(/\bspeak\(/g) || []).length, 2);
+  const bookmarklet = decodeURIComponent(buildBookmarklet().slice("javascript:".length));
+  assert.doesNotMatch(bookmarklet, /sayOrQueue|PENDING_SPEECH|say\("Voice on/);
+  assert.equal((bookmarklet.match(/playChime\(/g) || []).length, 1); // definition only
+  assert.match(bookmarklet, /Read report aloud/);
+});
+
 test("preferences work when local storage is unavailable", () => {
   const previous = globalThis.localStorage;
   globalThis.localStorage = { getItem: () => { throw new Error("denied"); }, setItem: () => { throw new Error("denied"); }, removeItem: () => { throw new Error("denied"); } };

@@ -69,7 +69,7 @@ export default function FloatingBuddy({ result, busy, onNewScan }) {
   }
   function previewVoice() {
     setMuted(false);
-    speak("Hi, I’m Rose, your fine-print guide. PaperRose AI, by Paperbagexpress. Let’s make the small print clear.");
+    speak("This is a preview of your selected voice. Use Read my report to hear your analysis.");
   }
   function readReport() {
     if (!result) return;
@@ -84,22 +84,22 @@ export default function FloatingBuddy({ result, busy, onNewScan }) {
   const selectedVoice = voices.some((voice) => voice.voiceURI === preferences.voice || voice.name === preferences.voice) ? preferences.voice : "";
 
   return <>
-    {expanded && <section className="buddy-panel" style={{ left: panelLeft, top: panelTop }} role="dialog" aria-label="Rose assistant">
+    {expanded && <section className="buddy-panel" style={{ left: panelLeft, top: panelTop }} role="dialog" aria-label="Report assistant">
       <div className="buddy-panel-head">
-        <div className="buddy-identity"><Mascot size={48} className="" /><div><strong>Meet Rose</strong><small>Your fine-print guide</small></div></div>
+        <div className="buddy-identity"><Mascot size={48} className="" /><div><strong>Report assistant</strong><small>Fine-print analysis</small></div></div>
         <button ref={closeRef} className="buddy-close" onClick={closePanel} aria-label="Close assistant"><Icon name="close" size={16} /></button>
       </div>
       <div className="buddy-intro"><span className="buddy-online-dot" />{narration}</div>
       {result ? <div className="buddy-report-preview">
         <span className={`buddy-report-grade level-${result.safety_level}`}>{result.grade}</span>
         <div><strong>{result.flags?.length || 0} flags to review</strong><p>{result.plain_summary?.[0]}</p></div>
-      </div> : <p className="buddy-description">I help you navigate agreements and read your report aloud. Start with a link, pasted text, or a document.</p>}
+      </div> : <p className="buddy-description">Start with a link, pasted text, or a document. Audio plays only when you press Preview voice or Read my report.</p>}
       <div className="buddy-actions">
         {result && supported && <button className="btn btn-primary" onClick={readReport}><Icon name="volume" size={17} /> Read my report</button>}
         <button className="btn btn-ghost" disabled={busy} onClick={() => { closePanel(); onNewScan(); }}><Icon name="sparkles" size={17} /> {result ? "New scan" : "Start a scan"}</button>
       </div>
       <div className="voice-settings">
-        <h3><Icon name="volume" size={18} /> Make Rose sound like you</h3>
+        <h3><Icon name="volume" size={18} /> Voice settings</h3>
         {supported ? <>
           <label htmlFor="buddy-voice">Voice</label>
           <select id="buddy-voice" value={selectedVoice} onChange={(event) => setVoiceByName(event.target.value)}>
@@ -117,18 +117,17 @@ export default function FloatingBuddy({ result, busy, onNewScan }) {
             <button className="btn btn-ghost btn-sm" onClick={stopSpeaking}><Icon name="stop" size={15} /> Stop</button>
             <button className="btn btn-ghost btn-sm" onClick={toggleMuted}>{muted ? "Unmute" : "Mute"}</button>
           </div>
-          <p className="voice-note">Voices depend on your browser and device. {voices.length ? "Settings are saved on this device." : "Device voices are loading; automatic speech is available if your browser supports it."} Some system voices use your browser’s speech service.</p>
-        </> : <p className="voice-note">Speech isn’t available in this browser. Rose still shows your report and helps you navigate.</p>}
+          <p className="voice-note">Voices depend on your browser and device. {voices.length ? "Settings are saved on this device." : "Device voices are loading. Playback is always manual."} Some system voices use your browser’s speech service.</p>
+        </> : <p className="voice-note">Speech isn’t available in this browser. Report viewing and scanning still work.</p>}
       </div>
       <div className="buddy-credit">PaperRoseAI <strong>by Paperbagexpress</strong></div>
     </section>}
     <div className="buddy-anchor" style={{ left: pos.x, top: pos.y }}>
-      {supported && <button className={`buddy-mute ${muted ? "muted" : ""}`} onClick={toggleMuted} title={muted ? "Unmute Rose" : "Mute Rose"} aria-label={muted ? "Unmute Rose" : "Mute Rose"}><Icon name={muted ? "mute" : "volume"} size={16} /></button>}
-      <button ref={launcherRef} className={`buddy-bot ${dragging ? "dragging" : ""} ${busy ? "busy" : ""}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={() => { drag.current = null; setDragging(false); }} onClick={(event) => { if (event.detail === 0) setExpanded((value) => !value); }} aria-label="Open Rose assistant and voice settings" aria-expanded={expanded} title="Meet Rose · drag to move">
+      {supported && <button className={`buddy-mute ${muted ? "muted" : ""}`} onClick={toggleMuted} title={muted ? "Unmute report audio" : "Mute report audio"} aria-label={muted ? "Unmute report audio" : "Mute report audio"}><Icon name={muted ? "mute" : "volume"} size={16} /></button>}
+      <button ref={launcherRef} className={`buddy-bot ${dragging ? "dragging" : ""} ${busy ? "busy" : ""}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={() => { drag.current = null; setDragging(false); }} onClick={(event) => { if (event.detail === 0) setExpanded((value) => !value); }} aria-label="Open report assistant and voice settings" aria-expanded={expanded} title="Report assistant · drag to move">
         <Mascot size={76} mood={busy ? "thinking" : "happy"} className="" />
         {busy && <div className="buddy-scanline" />}
       </button>
-      <span className="buddy-name">Rose <span /></span>
     </div>
   </>;
 }

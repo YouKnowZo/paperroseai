@@ -9,7 +9,7 @@
  *   error         quick descending thud (something went wrong)
  *
  * Follows the same rules as the voice: silenced by the buddy mute toggle,
- * deferred until the first user gesture (autoplay policies), lazily creates
+ * manual playback only (never queued for a later gesture), lazily creates
  * one shared AudioContext. Dispatches a `pr:earcon` event whenever a chime
  * plays — handy for testing and for future visualizers.
  */
@@ -86,17 +86,13 @@ function actuallyPlay(level) {
 
 /**
  * Play the verdict chime for a safety level ("safe", "moderate", "caution",
- * "dangerous") or "error". Respects mute; if the page hasn't had its first
- * user gesture yet, the chime is held and plays on first interaction.
+ * "dangerous") or "error". Manual playback only; never queue a chime.
  */
 export function playEarcon(level) {
   if (isChimeMuted()) return false;
-  if (!hasUnlocked()) {
-    onFirstUnlock(() => actuallyPlay(level));
-    return false;
-  }
+  if (window.navigator?.userActivation?.isActive !== true) return false;
   return actuallyPlay(level);
 }
 
 // Imported late to avoid a circular import — voice.js owns the mute flag.
-import { isMuted as isChimeMuted, hasUnlocked, onFirstUnlock } from "./voice.js";
+import { isMuted as isChimeMuted } from "./voice.js";

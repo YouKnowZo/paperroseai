@@ -1,5 +1,6 @@
 import GradeDial from "./GradeDial.jsx";
 import Icon from "./Icon.jsx";
+import AffiliateSupport from "./AffiliateSupport.jsx";
 
 const SEV_ORDER = { high: "High", medium: "Medium", low: "Low" };
 
@@ -172,6 +173,8 @@ export default function Results({ result, publicMode = false }) {
           ))}
         </div>
       )}
+
+      <AffiliateSupport report />
 
       <div className="results-meta">
         <span className="engine-chip">{m.engine === "ai" ? `🤖 ${m.model}` : "📐 rules engine"}</span>
