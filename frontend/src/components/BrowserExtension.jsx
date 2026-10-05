@@ -22,10 +22,15 @@ export default function BrowserExtension({ onTryIt }) {
           <button className="btn btn-ghost" type="button" onClick={() => download("chromium")}><Icon name="download" size={17} /> Chrome / Edge / Brave</button>
           <button className="btn btn-ghost" type="button" onClick={() => download("firefox")}><Icon name="download" size={17} /> Firefox</button>
         </div>
+        <div className="extension-zip-links" aria-label="Prebuilt extension packages">
+          <span className="extension-zip-label">or grab the packaged ZIP:</span>
+          <a className="btn btn-ghost" href="/browser-extension/paperroseai-chromium-extension.zip" download><Icon name="download" size={15} /> Chrome / Edge / Brave ZIP</a>
+          <a className="btn btn-ghost" href="/browser-extension/paperroseai-firefox-extension.zip" download><Icon name="download" size={15} /> Firefox ZIP</a>
+        </div>
         {downloadError && <p className="extension-error" role="alert">{downloadError}</p>}
         <details className="extension-manual"><summary>Manual install or Opera instructions</summary><ol>
-          <li>Download the all-browser extension ZIP and extract it.</li>
-          <li>Open <strong>browser-extension/chromium</strong> (Chromium) or <strong>browser-extension/firefox</strong> (Firefox).</li>
+          <li>Download the extension ZIP for your browser and extract it.</li>
+          <li>Open the extracted <strong>chromium</strong> folder (Chrome, Edge, Brave, Opera) or <strong>firefox</strong> folder.</li>
           <li>Load the folder as an unpacked/temporary extension from your browser's extensions page.</li>
         </ol></details>
         <ol className="extension-steps">

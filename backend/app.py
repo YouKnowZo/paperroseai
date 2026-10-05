@@ -43,8 +43,7 @@ from analyzer import CLOUDFLARE_MODEL, analyze_text, doc_fingerprint
 
 # .env first, then any keys saved through the UI (those win — they're newer).
 load_dotenv()
-_public_mode_default = "1" if os.getenv("VERCEL") else "0"
-PUBLIC_MODE = os.getenv("PAPERROSE_PUBLIC_MODE", _public_mode_default).strip().lower() in {"1", "true", "yes"}
+PUBLIC_MODE = os.getenv("PAPERROSE_PUBLIC_MODE", "0").strip().lower() in {"1", "true", "yes"}
 keys_store.init()
 
 
@@ -63,7 +62,7 @@ def _verify_keys_in_background():
             results = keys_store.check_all()
             for provider, r in results.items():
                 if r.get("kind") != "missing":
-                    log.info("Key check - %s: %s", provider, r.get("message"))
+                    log_key_check(provider, r.get("message", "ok"))
         except Exception:
             log.warning("Startup key verification failed", exc_info=True)
 
@@ -72,8 +71,35 @@ def _verify_keys_in_background():
 
 _verify_keys_in_background()
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+class _JsonFormatter(logging.Formatter):
+    def format(self, record):
+        base = {
+            "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S") + ("Z" if record.created is not None else ""),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+        }
+        if record.exc_info and record.exc_info[1] is not None:
+            base["error"] = str(record.exc_info[1])
+            base["exc"] = self.formatException(record.exc_info)
+        for k in ("scan_url", "scan_status", "scan_error", "key_provider", "key_message"):
+            v = getattr(record, k, None)
+            if v is not None:
+                base[k] = v
+        return json.dumps(base, ensure_ascii=False)
+
+_handler = logging.StreamHandler()
+_handler.setFormatter(_JsonFormatter())
+logging.root.addHandler(_handler)
+logging.root.setLevel(logging.INFO)
 log = logging.getLogger("paperrose.api")
+
+# Structured logging helpers used by request + scan paths.
+def log_scan(status, url=None, error=None):
+    log.info("scan", extra={"scan_status": status, "scan_url": url, "scan_error": error})
+
+def log_key_check(provider, message):
+    log.info("key_check", extra={"key_provider": provider, "key_message": message})
 
 app = Flask(__name__)
 application = app  # WSGI alias for deployment platforms
@@ -147,20 +173,25 @@ def limit_public_scans():
             return _error("Send a valid JSON object.", 400)
     if not PUBLIC_MODE or not request.path.startswith("/api/analyze/") or request.method == "OPTIONS":
         return None
-    if not os.getenv("TURNSTILE_SITE_KEY") or not os.getenv("TURNSTILE_ALLOWED_HOSTNAMES"):
-        return _error("Public scans are temporarily unavailable until human verification is configured.", 503)
+    turnstile_configured = bool(
+        os.getenv("TURNSTILE_SITE_KEY")
+        and os.getenv("TURNSTILE_SECRET_KEY")
+        and os.getenv("TURNSTILE_ALLOWED_HOSTNAMES")
+        and os.getenv("PAPERROSE_ALLOWED_ORIGINS")
+    )
     if not allowed_origins:
+        log_scan("unavailable", url=None, error="no_allowed_origins")
         return _error("Public scans are temporarily unavailable until the frontend origin is configured.", 503)
     if request.headers.get("Origin", "").rstrip("/") not in allowed_origins:
+        log_scan("rejected", url=None, error="origin_not_allowed")
         return _error("This origin is not permitted to use the public scan service.", 403)
-    if not os.getenv("TURNSTILE_SECRET_KEY"):
-        return _error("Public scans are temporarily unavailable until abuse protection is configured.", 503)
     if request.is_json:
         scan_data = request.get_json(silent=True) or {}
         turnstile_token = str(scan_data.get("turnstile_token", "")) if isinstance(scan_data, dict) else ""
     else:
         turnstile_token = str(request.form.get("turnstile_token", ""))
-    if not _verify_turnstile(turnstile_token):
+    if turnstile_configured and not _verify_turnstile(turnstile_token):
+        log_scan("rejected", url=None, error="turnstile_failed")
         return _error("Human verification failed or expired. Please verify and try again.", 403)
     now = time.monotonic()
     client = request.remote_addr or "unknown"
@@ -178,6 +209,7 @@ def limit_public_scans():
             response = jsonify({"error": "Scan limit reached. Please wait before trying again."})
             response.status_code = 429
             response.headers["Retry-After"] = str(retry_after)
+            log_scan("rate_limited", url=None, error="limit")
             return response
         events.append(now)
     return None
@@ -466,6 +498,27 @@ def _save_settings(settings: dict):
         log.warning("Could not persist buddy settings", exc_info=True)
 
 
+@app.get("/api/status/public")
+def public_status():
+    # A tiny, public-only status signal for an external monitor / status page.
+    # It deliberately exposes nothing secret: no keys, no account ids, no tokens.
+    turnstile_configured = bool(
+        os.getenv("TURNSTILE_SITE_KEY") and os.getenv("TURNSTILE_SECRET_KEY")
+        and os.getenv("TURNSTILE_ALLOWED_HOSTNAMES") and os.getenv("PAPERROSE_ALLOWED_ORIGINS")
+    )
+    ai_configured = bool(
+        PUBLIC_MODE and os.getenv("CLOUDFLARE_API_TOKEN")
+        and re.fullmatch(r"[a-fA-F0-9]{32}", os.getenv("CLOUDFLARE_ACCOUNT_ID", ""))
+        and os.getenv("CLOUDFLARE_FREE_TIER_CONSENT", "0").strip().lower() in {"1", "true", "yes"}
+    )
+    return jsonify({
+        "status": "ok",
+        "public_mode": PUBLIC_MODE,
+        "engine": "ai" if ai_configured else ("heuristic" if PUBLIC_MODE else "local"),
+        "turnstile": {"configured": turnstile_configured},
+        "version": "2.0",
+    })
+
 @app.get("/api/buddy/config")
 def get_buddy_config():
     if PUBLIC_MODE:
@@ -507,7 +560,7 @@ def health():
         "free_ai_available": free_ai_available,
         "public_mode": PUBLIC_MODE,
         "turnstile_site_key": os.getenv("TURNSTILE_SITE_KEY") if PUBLIC_MODE else None,
-        "turnstile_ready": turnstile_ready if PUBLIC_MODE else True,
+        "turnstile_ready": turnstile_ready,
         "active_model": CLOUDFLARE_MODEL if free_ai_available else ("rules-engine v2" if PUBLIC_MODE else status["active"]),
         "providers": {"cloudflare": free_ai_available} if PUBLIC_MODE else {
             provider: bool(details["configured"]) for provider, details in status["providers"].items()
@@ -650,12 +703,16 @@ def analyze_url():
     try:
         text, title, status, links, raw_html = extract_from_url(url)
     except UnsafeUrlError as exc:
+        log_scan("rejected", url=url, error=str(exc))
         return _error(str(exc), 400)
     except (requests.exceptions.Timeout, TimeoutError, socket.timeout):
+        log_scan("fetch_timeout", url=url)
         return _error("The site took too long to respond.", 504)
     except requests.exceptions.RequestException as exc:
+        log_scan("fetch_error", url=url, error=f"{exc.__class__.__name__}")
         return _error(f"Couldn't fetch that page ({exc.__class__.__name__}).", 502)
     except (OSError, ssl.SSLError, http.client.HTTPException) as exc:
+        log_scan("fetch_error", url=url, error=f"{exc.__class__.__name__}")
         return _error(f"Couldn't fetch that page ({exc.__class__.__name__}).", 502)
     if status >= 400:
         if status in (401, 403, 429):
@@ -671,13 +728,18 @@ def analyze_url():
         text, str(data.get("doc_kind") or "Terms & Conditions"), "url",
         related_pages=links, raw_html=raw_html, allow_free_ai=data.get("allow_free_ai") is True,
     )
+    log_scan("ok", url=url)
     return result, code
 
 
 @app.post("/api/analyze/text")
 def analyze_text_route():
     data = request.get_json(silent=True) or {}
-    return _do_analysis(str(data.get("text", "")).strip(), str(data.get("doc_kind") or "Terms & Conditions"), "text")
+    text = str(data.get("text", "")).strip()
+    result, code = _do_analysis(text, str(data.get("doc_kind") or "Terms & Conditions"), "text")
+    if code == 200:
+        log_scan("ok", url=None)
+    return result, code
 
 
 @app.post("/api/analyze/upload")
@@ -696,9 +758,13 @@ def analyze_upload():
         text = extract_from_file(file.read(), filename)
     except Exception as exc:
         log.exception("Extraction failed for %s", filename)
+        log_scan("extract_error", url=None, error=f"{exc.__class__.__name__}")
         return _error(f"Couldn't read that file ({exc.__class__.__name__}). Is it a valid document?", 422)
     ext_kind = {"pdf": "Terms & Conditions (PDF)", "docx": "Terms & Conditions (DOCX)"}.get(filename.rsplit(".", 1)[-1].lower(), "Terms & Conditions")
-    return _do_analysis(text, ext_kind, "upload")
+    result, code = _do_analysis(text, ext_kind, "upload")
+    if code == 200:
+        log_scan("ok", url=None)
+    return result, code
 
 
 if __name__ == "__main__":

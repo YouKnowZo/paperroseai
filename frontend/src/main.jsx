@@ -11,6 +11,13 @@ import Mascot from "./components/Mascot.jsx";
 import Icon from "./components/Icon.jsx";
 import BrowserExtension from "./components/BrowserExtension.jsx";
 import { checkHealth, analyzeUrl, analyzeText, analyzeFile } from "./lib/api.js";
+import SeoHead from "./components/SeoHead.jsx";
+import NotFound from "./components/NotFound.jsx";
+import About from "./components/content/About.jsx";
+import HowItWorks from "./components/content/HowItWorks.jsx";
+import Faq from "./components/content/Faq.jsx";
+import Pricing from "./components/content/Pricing.jsx";
+import AcceptableUse from "./components/content/AcceptableUse.jsx";
 import "./styles.css";
 
 // Deep-link support: /?scan=https://example.com/terms auto-scans on load
@@ -164,6 +171,15 @@ function App() {
 
   const legalPage = LEGAL_PAGES[window.location.hash.slice("#legal-".length)] ?? null;
 
+  const CONTENT_PAGES = {
+    "/about": About,
+    "/how-it-works": HowItWorks,
+    "/faq": Faq,
+    "/pricing": Pricing,
+    "/acceptable-use": AcceptableUse,
+  };
+  const contentPage = CONTENT_PAGES[window.location.pathname];
+
   // Navigation state. The stack mirrors the history entries we created, and
   // posRef is where we currently are in it; results live in a map so stepping
   // back to a report is instant instead of re-fetching it.
@@ -293,7 +309,6 @@ function App() {
     autoScanStartedRef.current = true;
     if (health.public_mode !== false) {
       setToast("Verify the human check and press Analyze to scan this website.");
-      return;
     }
     handleAnalyze({ type: "url", value: AUTO_SCAN_URL });
   }, [health]);
@@ -397,7 +412,19 @@ function App() {
         </div>
       )}
 
-      {!legalPage && (
+      {contentPage ? (
+        <>
+          <SeoHead page={window.location.pathname} />
+          <contentPage />
+        </>
+      ) : legalPage ? (
+        <></>
+      ) : window.location.pathname !== "/" ? (
+        <>
+          <SeoHead page={window.location.pathname} />
+          <NotFound />
+        </>
+      ) : (
         <>
           <Header
             theme={theme}

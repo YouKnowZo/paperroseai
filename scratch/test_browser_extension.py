@@ -6,8 +6,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 class BrowserExtensionTests(unittest.TestCase):
     def setUp(self):
-        self.chromium = ROOT / "browser-extension" / "chromium"
-        self.firefox = ROOT / "browser-extension" / "firefox"
+        self.chromium = ROOT / "frontend" / "public" / "browser-extension" / "chromium"
+        self.firefox = ROOT / "frontend" / "public" / "browser-extension" / "firefox"
         self.public_chromium = ROOT / "frontend" / "public" / "browser-extension" / "chromium"
         self.public_firefox = ROOT / "frontend" / "public" / "browser-extension" / "firefox"
 

@@ -119,7 +119,11 @@ settings as project Environment Variables. Never commit secrets. Deploy producti
 The hosted Python function body limit is 4.5 MB, so the public backend caps uploads/requests at
 4 MiB (local mode remains 16 MiB). Serverless functions have ephemeral writable storage; public
 mode disables key CRUD and does not rely on local JSON persistence. Scan throttling is
-process-local and resets with new function instances, so Turnstile is required for public scans.
+process-local and resets with new function instances, so a hard per-IP/day cap can
+reset between invocations on serverless hosts. Turnstile (when configured) and the
+origin allowlist are the reliable public-gate mechanisms; the rate cap is a soft
+backstop, not a strict abuse fence. Public scans also fail closed without a
+configured frontend origin.
 
 ### Public deployment privacy and provider choice
 
@@ -165,8 +169,8 @@ verification still applies.
 **Not yet store-listed/signed:** currently provided as unpacked/test extension source, not in the
 Chrome Web Store, Edge Add-ons, AMO, or other browser stores. Firefox temporary extensions are
 removed on restart. Opera may support the Chromium package. Safari requires separate signed
-Safari Web Extension packaging and is not included. Source is in `browser-extension/`; matching
-production download files are in `frontend/public/browser-extension/`.
+Safari Web Extension packaging and is not included. Source and production files are in `frontend/public/browser-extension/`.
+That folder is the single source of truth for the browser extension.
 
 ## Affiliate income (optional, off until approved)
 

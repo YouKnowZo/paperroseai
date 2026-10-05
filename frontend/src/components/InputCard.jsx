@@ -60,10 +60,14 @@ export default function InputCard({ busy, onAnalyze, publicMode = false, freeAIA
 
   const canSubmit =
     !busy && backendReady &&
-    (!publicMode || (turnstileReady && Boolean(turnstileToken))) &&
+    ((!publicMode) ||
+      (!turnstileReady) ||
+      Boolean(turnstileToken)) &&
     ((mode === "url" && url.trim().length > 3) ||
       (mode === "paste" && text.trim().length > 100) ||
       (mode === "upload" && file));
+
+  const needsTurnstile = publicMode && turnstileReady && !turnstileToken;
 
   async function pasteExtensionText() {
     try {
@@ -134,7 +138,7 @@ export default function InputCard({ busy, onAnalyze, publicMode = false, freeAIA
           />
           <div className="input-divider" />
           <button className="btn btn-primary" onClick={submit} disabled={!canSubmit}>
-            {busy ? "Analyzing…" : "Analyze"}
+            {busy ? "Analyzing…" : needsTurnstile ? "Verify human check first" : "Analyze"}
           </button>
         </div>
       )}

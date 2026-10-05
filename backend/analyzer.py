@@ -27,7 +27,7 @@ log = logging.getLogger("paperrose.analyzer")
 
 
 def _is_public_mode() -> bool:
-    default = "1" if os.getenv("VERCEL") else "0"
+    default = "0"
     return os.getenv("PAPERROSE_PUBLIC_MODE", default).strip().lower() in {"1", "true", "yes"}
 
 
