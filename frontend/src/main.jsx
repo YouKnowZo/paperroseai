@@ -179,6 +179,7 @@ function App() {
     "/acceptable-use": AcceptableUse,
   };
   const contentPage = CONTENT_PAGES[window.location.pathname];
+  const ContentPage = contentPage;
 
   // Navigation state. The stack mirrors the history entries we created, and
   // posRef is where we currently are in it; results live in a map so stepping
@@ -415,7 +416,7 @@ function App() {
       {contentPage ? (
         <>
           <SeoHead page={window.location.pathname} />
-          <contentPage />
+          <ContentPage />
         </>
       ) : legalPage ? (
         <></>

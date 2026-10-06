@@ -13,8 +13,8 @@
  * at the server/edge; the sitemap lists the real human-facing URLs.
  *
  * This module is used in two worlds:
- *   - Browser bundle: SeoHead reads import.meta.env.VITE_SITE_URL at runtime.
- *   - Node build plugin: the plugin passes process.env.VITE_SITE_URL in.
+ *   - Browser bundle: SeoHead uses the serving origin for canonical metadata.
+ *   - Node build plugin: the plugin requires process.env.VITE_SITE_URL for crawl URLs.
  * The pure functions below take siteUrl explicitly so neither world is broken.
  */
 export const SITE_NAME = "PaperRoseAI";
@@ -31,7 +31,18 @@ export const CONTENT_PAGES = [
 
 /** Every public URL we want crawlers/search to know about. */
 export function siteUrls(siteUrl) {
-  const base = (siteUrl || "/").replace(/\/$/, "");
+  const rawBase = (siteUrl || "").trim().replace(/\/$/, "");
+  if (!rawBase) throw new Error("VITE_SITE_URL must be set to an absolute public site URL to generate a sitemap.");
+  let parsed;
+  try {
+    parsed = new URL(rawBase);
+  } catch {
+    throw new Error("VITE_SITE_URL must be an absolute public site URL to generate a sitemap.");
+  }
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) {
+    throw new Error("VITE_SITE_URL must be an HTTPS origin without credentials, path, query, or fragment.");
+  }
+  const base = parsed.origin;
   return [
     { url: base, changefreq: "hourly", priority: "1.0" },
     ...CONTENT_PAGES.map((p) => ({ url: base + p.path, ...p })),
@@ -40,7 +51,7 @@ export function siteUrls(siteUrl) {
 
 export function sitemapXml(siteUrl, now) {
   const urls = siteUrls(siteUrl);
-  const base = (siteUrl || "/").replace(/\/$/, "");
+  const base = new URL(siteUrl.trim().replace(/\/$/, "")).origin;
   const nowStr = new Date(now).toISOString();
   const body = urls
     .map(
@@ -60,7 +71,7 @@ ${body}
 }
 
 export function robotsTxt(siteUrl) {
-  const base = (siteUrl || "/").replace(/\/$/, "");
+  const base = new URL(siteUrl.trim().replace(/\/$/, "")).origin;
   return `User-agent: *
 Allow: /
 

@@ -1,7 +1,5 @@
 import { useEffect, useRef } from "react";
 
-const BASE_URL = (import.meta.env.VITE_SITE_URL || window.location.origin).replace(/\/$/, "");
-const SITE_NAME = "PaperRoseAI";
 const SITE_DESC =
   "Understand the fine print with fairness grades, evidence-backed red flags, plain-English takeaways, and a voice that fits you.";
 
@@ -53,6 +51,8 @@ export default function SeoHead({ page = "/" }) {
 
     const title = p.title;
     const desc = p.desc;
+    const canonicalBase = window.location.origin;
+    const canonicalUrl = canonicalBase + page;
     const ogTitle = p.ogTitle;
     const ogType = p.ogType;
 
@@ -95,7 +95,7 @@ export default function SeoHead({ page = "/" }) {
       ogUrl.setAttribute("property", "og:url");
       document.head.appendChild(ogUrl);
     }
-    ogUrl.setAttribute("content", BASE_URL + page);
+    ogUrl.setAttribute("content", canonicalUrl);
 
     let tw = document.getElementById("pr-tw-title");
     if (!tw) {
@@ -131,7 +131,7 @@ export default function SeoHead({ page = "/" }) {
       canonical.rel = "canonical";
       document.head.appendChild(canonical);
     }
-    canonical.setAttribute("href", BASE_URL + page);
+    canonical.setAttribute("href", canonicalUrl);
   }, [page]);
   return null;
 }

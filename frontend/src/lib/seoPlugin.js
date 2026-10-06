@@ -10,7 +10,7 @@ import path from "node:path";
  * reads the same value via import.meta.env.VITE_SITE_URL at runtime.
  */
 export default function seoPlugin() {
-  const siteUrl = (process.env.VITE_SITE_URL || "").replace(/\/$/, "");
+  const siteUrl = (process.env.VITE_SITE_URL || "").trim().replace(/\/$/, "");
   return {
     name: "paperrose-seo",
     writeBundle() {
@@ -20,9 +20,7 @@ export default function seoPlugin() {
         fs.writeFileSync(path.resolve(out, "sitemap.xml"), sitemapXml(siteUrl, now), "utf8");
         fs.writeFileSync(path.resolve(out, "robots.txt"), robotsTxt(siteUrl), "utf8");
       } catch (err) {
-        // Build-time SEO emission is best-effort; a failed write here must
-        // not destroy the rest of the build.
-        console.warn("[paperrose-seo] could not write sitemap/robots:", err.message);
+        throw new Error(`[paperrose-seo] could not emit sitemap/robots: ${err.message}`, { cause: err });
       }
     },
   };

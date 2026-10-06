@@ -25,7 +25,7 @@ button.addEventListener("click", async () => {
     const text = await readVisibleText(tab.id);
     if (!text || text.length < 80) throw new Error("Not enough readable text. Open the terms page or select text on the page first.");
     await navigator.clipboard.writeText(text);
-    const appUrl = new URL("https://" + new URL(tab.url).hostname + "/");
+    const appUrl = new URL("https://frontend-five-amber-34.vercel.app/");
     appUrl.searchParams.set("extension", "1");
     await extensionApi.tabs.create({ url: appUrl.toString() });
     status.textContent = "Copied. Paste the text into PaperRoseAI, then press Analyze when ready.";

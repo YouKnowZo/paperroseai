@@ -113,17 +113,18 @@ and all other paths to the frontend under one domain. In Vercel, connect the rep
 root directory set to `.` and project framework set to **Services**; this requires both the
 dashboard setting and the `services` configuration in `vercel.json`. API requests use the same
 origin, so leave `VITE_API_URL` unset. Configure `PAPERROSE_PUBLIC_MODE=1`, the exact
-`PAPERROSE_ALLOWED_ORIGINS`, Turnstile settings, and (if enabling AI) Cloudflare Workers AI
-settings as project Environment Variables. Never commit secrets. Deploy production branch `main`.
+`PAPERROSE_ALLOWED_ORIGINS`, Turnstile settings, `VITE_SITE_URL` (the production HTTPS origin),
+and (if enabling AI) Cloudflare Workers AI settings as project Environment Variables. Never
+commit secrets. Deploy production branch `main`.
 
 The hosted Python function body limit is 4.5 MB, so the public backend caps uploads/requests at
 4 MiB (local mode remains 16 MiB). Serverless functions have ephemeral writable storage; public
 mode disables key CRUD and does not rely on local JSON persistence. Scan throttling is
 process-local and resets with new function instances, so a hard per-IP/day cap can
-reset between invocations on serverless hosts. Turnstile (when configured) and the
-origin allowlist are the reliable public-gate mechanisms; the rate cap is a soft
-backstop, not a strict abuse fence. Public scans also fail closed without a
-configured frontend origin.
+reset between invocations on serverless hosts. Turnstile and the exact
+origin allowlist are required public-gate mechanisms; the rate cap is a soft
+backstop, not a strict abuse fence. Public scans fail closed if either gate is not
+fully configured.
 
 ### Public deployment privacy and provider choice
 
@@ -135,7 +136,9 @@ account level and does not guarantee quota or uptime. See the current [pricing](
 and [data-use terms](https://developers.cloudflare.com/workers-ai/platform/data-usage/) before enabling it.
 
 For production, enable `PAPERROSE_PUBLIC_MODE=1`, set the exact public origin, and configure
-`TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, and `TURNSTILE_ALLOWED_HOSTNAMES`. Enable
+`TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, and `TURNSTILE_ALLOWED_HOSTNAMES`. Set
+`VITE_SITE_URL` to the canonical HTTPS origin so canonical metadata and the sitemap contain
+absolute public URLs. Enable
 `CLOUDFLARE_FREE_TIER_CONSENT=1` only after reviewing provider terms; set `CLOUDFLARE_ACCOUNT_ID`
 and `CLOUDFLARE_API_TOKEN` server-side if using hosted AI. Keep all secrets out of Git and
 browser `VITE_*` variables. Public scans fail closed without Siteverify.
@@ -175,8 +178,10 @@ That folder is the single source of truth for the browser extension.
 ## Affiliate income (optional, off until approved)
 
 No ad network, subscription, or checkout provider is connected. Affiliate recommendations stay
-hidden unless you have an approved, relevant partner referral URL. Apply to an actual legal-document
-or e-signature affiliate program first. Then configure public Vercel build variables
+hidden unless you have an approved, relevant partner referral URL. LegalZoom’s official
+[partner program](https://www.legalzoom.com/partner-programs) accepts applications from publishers,
+influencers, and partners providing education or end-customer need; it requires an application and
+approval. Apply before configuring any referral offer. Then configure public Vercel build variables
 `VITE_AFFILIATE_PARTNER_NAME` and `VITE_AFFILIATE_URL` with the approved program name and secure
 HTTPS referral URL. Beneath completed reports, the optional offer is marked sponsored and clearly
 discloses possible commission at no extra cost. Missing, invalid, insecure, and placeholder links

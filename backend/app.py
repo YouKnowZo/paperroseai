@@ -43,7 +43,7 @@ from analyzer import CLOUDFLARE_MODEL, analyze_text, doc_fingerprint
 
 # .env first, then any keys saved through the UI (those win — they're newer).
 load_dotenv()
-PUBLIC_MODE = os.getenv("PAPERROSE_PUBLIC_MODE", "0").strip().lower() in {"1", "true", "yes"}
+PUBLIC_MODE = os.getenv("PAPERROSE_PUBLIC_MODE", "1" if os.getenv("VERCEL") else "0").strip().lower() in {"1", "true", "yes"}
 keys_store.init()
 
 
@@ -182,6 +182,9 @@ def limit_public_scans():
     if not allowed_origins:
         log_scan("unavailable", url=None, error="no_allowed_origins")
         return _error("Public scans are temporarily unavailable until the frontend origin is configured.", 503)
+    if not turnstile_configured:
+        log_scan("unavailable", url=None, error="turnstile_not_configured")
+        return _error("Public scans are temporarily unavailable until human verification is configured.", 503)
     if request.headers.get("Origin", "").rstrip("/") not in allowed_origins:
         log_scan("rejected", url=None, error="origin_not_allowed")
         return _error("This origin is not permitted to use the public scan service.", 403)
@@ -190,7 +193,7 @@ def limit_public_scans():
         turnstile_token = str(scan_data.get("turnstile_token", "")) if isinstance(scan_data, dict) else ""
     else:
         turnstile_token = str(request.form.get("turnstile_token", ""))
-    if turnstile_configured and not _verify_turnstile(turnstile_token):
+    if not _verify_turnstile(turnstile_token):
         log_scan("rejected", url=None, error="turnstile_failed")
         return _error("Human verification failed or expired. Please verify and try again.", 403)
     now = time.monotonic()

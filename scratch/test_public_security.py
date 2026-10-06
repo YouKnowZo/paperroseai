@@ -35,6 +35,16 @@ class PublicSecurityTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 403)
 
+    def test_public_analysis_fails_closed_when_turnstile_is_not_configured(self):
+        with patch.dict(os.environ, {"TURNSTILE_SECRET_KEY": ""}):
+            response = self.client.post(
+                "/api/analyze/text",
+                json={"text": "x" * 200},
+                headers={"Origin": "https://app.example.test"},
+            )
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("human verification", response.get_json()["error"])
+
     def test_public_analysis_requires_an_allowlisted_origin(self):
         with patch.object(backend.requests, "post") as siteverify:
             response = self.client.post(
