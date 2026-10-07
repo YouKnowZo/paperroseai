@@ -31,6 +31,11 @@ def _is_public_mode() -> bool:
     return os.getenv("PAPERROSE_PUBLIC_MODE", default).strip().lower() in {"1", "true", "yes"}
 
 
+def _safe_log_error(error: Exception) -> str:
+    """Log only the exception class; provider text may contain credentials or user content."""
+    return type(error).__name__
+
+
 MAX_AI_CHARS = 60_000
 
 # --------------------------------------------------------------------------
@@ -756,8 +761,8 @@ def _call_openai(text: str, doc_kind: str) -> dict | None:
             ],
         )
         return json.loads(resp.choices[0].message.content)
-    except Exception as e:
-        log.warning("OpenAI analysis failed: %s", e)
+    except Exception as error:
+        log.warning("OpenAI analysis failed: %s", _safe_log_error(error))
         return None
 
 
@@ -799,8 +804,8 @@ def _call_cloudflare(text: str, doc_kind: str) -> dict | None:
         raw = result.get("response") or ""
         raw = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
         return json.loads(raw) if raw else None
-    except Exception as e:
-        log.warning("Cloudflare Workers AI analysis failed: %s", e)
+    except Exception as error:
+        log.warning("Cloudflare Workers AI analysis failed: %s", _safe_log_error(error))
         return None
 
 
@@ -841,8 +846,8 @@ def _call_gemini(text: str, doc_kind: str, allow_free_ai: bool = False) -> dict 
         raw = "".join(p.get("text", "") for p in parts)
         raw = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
         return json.loads(raw)
-    except Exception as e:
-        log.warning("Gemini analysis failed: %s", e)
+    except Exception as error:
+        log.warning("Gemini analysis failed: %s", _safe_log_error(error))
         return None
 
 

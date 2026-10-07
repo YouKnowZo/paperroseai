@@ -95,8 +95,26 @@ logging.root.setLevel(logging.INFO)
 log = logging.getLogger("paperrose.api")
 
 # Structured logging helpers used by request + scan paths.
+def _safe_log_url(url):
+    """Log the public host only; URL paths and query strings may contain tokens."""
+    if not url:
+        return None
+    try:
+        parsed = urlparse(str(url))
+        host = parsed.hostname
+        if not host:
+            return "[invalid-url]"
+        authority = f"[{host}]" if ":" in host else host
+        if parsed.port:
+            authority = f"{authority}:{parsed.port}"
+        return f"{parsed.scheme}://{authority}/"
+    except ValueError:
+        return "[invalid-url]"
+
+
 def log_scan(status, url=None, error=None):
-    log.info("scan", extra={"scan_status": status, "scan_url": url, "scan_error": error})
+    log.info("scan", extra={"scan_status": status, "scan_url": _safe_log_url(url), "scan_error": error})
+
 
 def log_key_check(provider, message):
     log.info("key_check", extra={"key_provider": provider, "key_message": message})
@@ -281,7 +299,7 @@ def _follow_legal_links(links: list[dict]):
         except (requests.exceptions.RequestException, UnsafeUrlError, OSError, http.client.HTTPException):
             continue
         if status < 400 and not _looks_like_js_shell(html, text) and len(text.split()) >= 150:
-            log.info("Following %s for readable legal text", link["url"])
+            log.info("Following %s for readable legal text", _safe_log_url(link["url"]))
             return text, title, html, sub_links
     return None
 
@@ -462,7 +480,7 @@ def extract_from_url(url: str) -> tuple[str, str, int, list[dict], str]:
     try:
         links = _discover_legal_links(soup, final_url)
     except Exception:
-        log.warning("Legal-link discovery failed for %s", final_url, exc_info=True)
+        log.warning("Legal-link discovery failed for %s", _safe_log_url(final_url), exc_info=True)
         links = []
     return _extract_html(soup), title, status, links, raw_html
 
